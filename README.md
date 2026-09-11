@@ -1,6 +1,7 @@
 # SQLParity
 
-Browser-only SQL tools for bulk query generation, formatting, and data-migration verification.
+Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing,
+value escaping, formatting, query review and dialect conversion.
 
 Everything is computed in the browser. There is no backend, no account, and no upload — the column
 names and identifiers you paste never leave your machine. The app builds to static files, so it can
@@ -120,12 +121,26 @@ pointer to the `.sql` download for the full text.
 
 ## Not built yet
 
-Deferred from v1, all of it dependent on `dt-sql-parser`:
+- **Share links.** Compressing the template and field list into a URL fragment via
+  `CompressionStream`, so a query set can be handed to a colleague without a server.
+  Tool-to-tool handoff already exists in [`lib/handoff.ts`](lib/handoff.ts), but that is
+  sessionStorage inside one browser — a delivery between two tabs, not a link.
 
-- DDL paste (`CREATE EXTERNAL TABLE` → column list with types)
-- Syntax validation with inline errors
-- Identifier validation against a pasted schema
-- Safety lint (missing `WHERE` on `UPDATE`/`DELETE`, missing `LIMIT`)
-- DDL diff — old schema against new, and validation queries for only what changed
-- Share links (compressed into a URL fragment via `CompressionStream`)
+## Deliberately not done
+
+These are settled decisions rather than a backlog. Each one was rejected because the
+plausible implementation returns a confident wrong answer, which is the worst failure mode
+for a correctness tool.
+
+- **A "missing `LIMIT`" safety lint.** Aggregates and intentional full exports are common
+  enough that it would cry wolf. [`lib/lint.ts`](lib/lint.ts) stays narrow — irreversible
+  or table-wide statements only — and the query optimizer covers the scan-cost cases that
+  are genuinely knowable from the text.
+- **Ranking two queries by speed.** Without table statistics, partition layout or indexes,
+  none of which are in the browser, nothing here can know which is faster.
+- **Renaming functions whose arguments differ in order.** `CHARINDEX` against `STRPOS`, or
+  `DATEDIFF` across dialects, would produce SQL that runs and returns the wrong rows.
+  Reported as unconverted instead.
+- **A data-type fallback for unknown types.** Generation blocks rather than emitting a
+  plausible sentinel.
 

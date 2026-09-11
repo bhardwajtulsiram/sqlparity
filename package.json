@@ -2,7 +2,7 @@
   "name": "sqlparity",
   "version": "0.1.0",
   "private": true,
-  "description": "Browser-only SQL bulk generation, formatting, and data-migration verification. Nothing leaves your machine.",
+  "description": "Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing, escaping, formatting, query review and dialect conversion. Nothing leaves your machine.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
