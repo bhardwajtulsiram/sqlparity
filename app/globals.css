@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    var(--font-plex-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    var(--font-plex-mono), ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+
+  --color-ink-50: oklch(0.985 0.002 265);
+  --color-ink-100: oklch(0.968 0.003 265);
+  --color-ink-200: oklch(0.925 0.005 265);
+  --color-ink-300: oklch(0.86 0.007 265);
+  --color-ink-400: oklch(0.68 0.012 265);
+  --color-ink-500: oklch(0.55 0.014 265);
+  --color-ink-600: oklch(0.44 0.016 265);
+  --color-ink-700: oklch(0.35 0.017 265);
+  --color-ink-800: oklch(0.25 0.016 265);
+  --color-ink-900: oklch(0.18 0.014 265);
+  --color-ink-950: oklch(0.13 0.012 265);
+
+  --color-accent-400: oklch(0.72 0.14 250);
+  --color-accent-500: oklch(0.62 0.17 250);
+  --color-accent-600: oklch(0.54 0.18 250);
+  --color-accent-700: oklch(0.46 0.16 250);
+}
+
+:root {
+  color-scheme: light dark;
+
+  /*
+   * Four surfaces, each a clearly visible step apart, so nesting depth is legible at
+   * a glance rather than inferred from hairline borders:
+   *
+   *   page    the canvas everything sits on — deliberately a real grey, not off-white
+   *   header  a card's title bar, tinted so it separates from the card's own body
+   *   card    the raised panel itself
+   *   sunken  inputs and editors, recessed back into the card
+   *
+   * An earlier version put page at 0.965 against a white card — a 0.035 lightness
+   * difference, which reads on screen as one continuous white sheet.
+   */
+  --surface-page: oklch(0.928 0.004 265);
+  --surface-header: oklch(0.963 0.005 265);
+  --surface-card: #fff;
+  --surface-sunken: oklch(0.951 0.005 265);
+  --border-card: oklch(0.868 0.008 265);
+  --shadow-card:
+    0 1px 2px oklch(0.2 0.02 265 / 0.08), 0 2px 6px oklch(0.2 0.02 265 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-page: oklch(0.125 0.012 265);
+    --surface-header: oklch(0.247 0.017 265);
+    --surface-card: oklch(0.205 0.015 265);
+    --surface-sunken: oklch(0.163 0.013 265);
+    --border-card: oklch(0.325 0.018 265);
+    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
+  }
+}
+
+/*
+ * The code surface.
+ *
+ * Every panel on this site that holds SQL is dark and syntax-lit, in both themes.
+ * That is the one deliberate contrast in the design: the page is paper, the query is
+ * a screen. It also does real work — the colour tells you what kind of token you are
+ * looking at, so a quoted identifier and a string literal stop looking alike, which
+ * is exactly the distinction this product exists to get right.
+ *
+ * Hues sit on the same 265 axis as the ink scale, so the lit code reads as part of
+ * the palette rather than a pasted-in theme.
+ */
+:root {
+  --code-surface: oklch(0.205 0.026 265);
+  --code-header: oklch(0.26 0.028 265);
+  --code-border: oklch(0.32 0.03 265);
+
+  --syn-plain: oklch(0.9 0.008 265);
+  --syn-keyword: oklch(0.79 0.115 305);
+  --syn-string: oklch(0.84 0.12 162);
+  --syn-number: oklch(0.86 0.11 82);
+  --syn-function: oklch(0.81 0.1 232);
+  --syn-identifier: oklch(0.88 0.035 210);
+  --syn-comment: oklch(0.66 0.02 265);
+  --syn-operator: oklch(0.72 0.02 265);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Recessed below the card rather than raised above the page. */
+    --code-surface: oklch(0.145 0.016 265);
+    --code-header: oklch(0.19 0.018 265);
+    --code-border: oklch(0.28 0.02 265);
+  }
+}
+
+/*
+ * One orchestrated moment: the hero demo types itself in on load, which shows the
+ * tool working before anyone touches it. Anything decorative beyond that is off.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  background: var(--surface-page);
+  color: var(--color-ink-900);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: var(--color-ink-100);
+  }
+}
+
+/* Inputs inherit the page's monospace intent where they hold SQL or data. */
+textarea,
+input,
+select {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--color-accent-500);
+  color: white;
+}

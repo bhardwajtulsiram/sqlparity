@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# build artefacts
+*.tsbuildinfo
+coverage/
+
+# environment
+.env
+.env.local
+.env*.local
+
+# editor / os
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# next dev re-creates these when a coding agent runs it; never part of this repo
+AGENTS.md
+CLAUDE.md
