@@ -1,0 +1,15 @@
+# Store and check out every text file with LF, on every platform.
+#
+# Without this, Git on Windows hands out CRLF working copies while storing LF, so a
+# clone on macOS or Linux reports all 61 files as modified before anyone has touched
+# them. Pinning it here makes the line ending a property of the repository rather than
+# of whoever cloned it.
+* text=auto eol=lf
+
+# Images and fonts must never be line-ending converted; a substituted byte corrupts
+# them silently. Nothing binary is tracked yet, but a favicon or a font would be.
+*.png binary
+*.jpg binary
+*.ico binary
+*.webp binary
+*.woff2 binary
