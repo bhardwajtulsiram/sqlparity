@@ -25,3 +25,6 @@ Thumbs.db
 # next dev re-creates these when a coding agent runs it; never part of this repo
 AGENTS.md
 CLAUDE.md
+
+# duckdb wasm runtime, copied from node_modules by scripts/copy-duckdb.mjs
+public/duckdb/

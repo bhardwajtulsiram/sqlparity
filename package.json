@@ -4,7 +4,9 @@
   "private": true,
   "description": "Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing, escaping, formatting, query review and dialect conversion. Nothing leaves your machine.",
   "scripts": {
+    "predev": "node scripts/copy-duckdb.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-duckdb.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -19,6 +21,7 @@
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.4",
     "@codemirror/view": "^6.43.11",
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
     "dt-sql-parser": "^4.5.1",
     "fflate": "^0.8.3",
     "next": "^16.3.4",

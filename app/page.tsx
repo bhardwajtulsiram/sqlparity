@@ -19,6 +19,12 @@ FROM input_db a
 JOIN output_db b ON a.customer_id = b.customer_id
 WHERE coalesce(a.customer_segment, '~') <> coalesce(b.customer_segment, '~')`;
 
+const SCRATCHPAD_QUERY = `SELECT segment, count(*) AS rows, avg(total) AS avg_total
+FROM orders
+WHERE created_at >= DATE '2026-01-01'
+GROUP BY segment
+ORDER BY rows DESC`;
+
 const FORMATTER_OUT = `SELECT
     a.customer_id
   , a.customer_segment
@@ -40,11 +46,18 @@ function Line({ color = 'var(--syn-plain)', children }: { color?: string; childr
 
 const TOOLS = [
   {
+    href: '/scratchpad/',
+    name: 'SQL scratchpad',
+    line: 'Drop in a CSV or Parquet file and query it with real SQL. DuckDB runs inside the tab, so the file is never uploaded.',
+    caption: 'orders.csv — read off your disk, not uploaded',
+    wide: true,
+    preview: <Sql code={SCRATCHPAD_QUERY} className="text-[12.5px] leading-relaxed" />,
+  },
+  {
     href: '/bulk-query-generator/',
     name: 'Bulk query generator',
     line: 'One template plus a pasted column list becomes one validation query per field, with the right null placeholder for each data type.',
     caption: 'From one CREATE TABLE, 412 columns',
-    wide: true,
     preview: <Sql code={BULK_QUERY} className="text-[12.5px] leading-relaxed" />,
   },
   {
@@ -122,9 +135,9 @@ export default function Home() {
               Your schema never leaves this tab.
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-ink-600 dark:text-ink-300">
-              Six tools for the work around a migration — generating the checks, diffing the
-              definitions, escaping the values, formatting, reviewing and converting. Every one of
-              them computes right here.
+              Seven tools for the work around a migration — querying a file, generating the
+              checks, diffing the definitions, escaping the values, formatting, reviewing and
+              converting. Every one of them computes right here.
             </p>
             <p className="mt-3 text-lg leading-relaxed text-ink-600 dark:text-ink-300">
               No account. No upload. No server to trust.
@@ -151,7 +164,7 @@ export default function Home() {
       </section>
 
       <section>
-        <h2 className="text-2xl font-semibold tracking-tight">Six tools, one workflow</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Seven tools, one workflow</h2>
         <p className="mt-2 max-w-2xl text-ink-600 dark:text-ink-400">
           Built around one job: proving a migration copied every column correctly, without handing
           your table definitions to anyone.

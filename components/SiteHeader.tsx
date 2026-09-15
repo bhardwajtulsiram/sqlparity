@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TOOLS = [
+  { href: '/scratchpad/', label: 'Scratchpad' },
   { href: '/in-list-builder/', label: 'IN list builder' },
   { href: '/bulk-query-generator/', label: 'Bulk generator' },
   { href: '/schema-diff/', label: 'Schema diff' },

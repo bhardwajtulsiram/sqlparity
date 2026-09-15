@@ -1,7 +1,7 @@
 # SQLParity
 
-Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing,
-value escaping, formatting, query review and dialect conversion.
+Browser-only SQL tools for data-migration verification: querying a local file, bulk query
+generation, schema diffing, value escaping, formatting, query review and dialect conversion.
 
 Everything is computed in the browser. There is no backend, no account, and no upload — the column
 names and identifiers you paste never leave your machine. The app builds to static files, so it can
@@ -11,6 +11,7 @@ be hosted anywhere.
 
 | Route | What it does |
 | --- | --- |
+| `/scratchpad` | Drop in a CSV or Parquet file and query it with real SQL, via DuckDB compiled to WebAssembly |
 | `/in-list-builder` | Paste a column of values, get a properly quoted and escaped `IN (…)` clause |
 | `/bulk-query-generator` | One template plus a list of fields, one query per field |
 | `/schema-diff` | Compare two `CREATE TABLE` statements, generate checks for what changed |
@@ -54,6 +55,31 @@ Reversed, the backslash introduced by `\'` would itself be doubled, terminating 
 
 Numeric auto-detection deliberately treats `007` as a string. Emitted unquoted it would become `7`
 and match the wrong rows.
+
+### Running SQL without a server
+
+`/scratchpad` runs [DuckDB compiled to WebAssembly](https://duckdb.org/2021/10/29/duckdb-wasm)
+inside the tab. A dropped file is registered with `BROWSER_FILEREADER`, so the engine streams it
+straight off disk — a Parquet file larger than memory stays queryable and nothing is copied.
+
+Two decisions in [`scripts/copy-duckdb.mjs`](scripts/copy-duckdb.mjs) are worth keeping:
+
+- **Served from this origin, not a CDN.** The published bundles point at jsDelivr, which would be
+  one line shorter and would also be the single outbound request this product claims not to make.
+  The counter on the home page measures exactly that and would turn red.
+- **Copied at build time, not committed.** The runtime is 75 MB against a repository under half a
+  megabyte. `pnpm` reproduces it exactly from the lockfile, so `public/duckdb/` is gitignored.
+
+The `coi` bundle is deliberately absent: it needs COOP/COEP headers a static host may not let you
+set, and buys threads this workload does not need.
+
+The honest limits. This is DuckDB, so its SQL is close to PostgreSQL and Athena or T-SQL specifics
+will not run — it is for checking that logic is right against sample rows, not for reaching a
+warehouse. The engine is a 7.7 MB download, deferred until the first query rather than paid on page
+load. And DuckDB does not error on a malformed CSV; it quietly falls back to one wide column, or
+drops rows that do not fit and names the rest `column0`, `column1`. Both tells are detected in
+[`lib/scratchpad.ts`](lib/scratchpad.ts) and reported, because a table that loads successfully
+while missing rows is the exact failure this project exists to refuse.
 
 ### Reviewing and converting without a model
 
@@ -118,6 +144,7 @@ pointer to the `.sql` download for the full text.
 | `write-excel-file` | `.xlsx` export (~19 KB gz) |
 | `fflate` | Zip for the numbered `.sql` set |
 | `dt-sql-parser` | ANTLR grammars behind DDL parsing and syntax validation |
+| `@duckdb/duckdb-wasm` | The scratchpad engine; lazy-loaded on that route only |
 
 ## Not built yet
 
