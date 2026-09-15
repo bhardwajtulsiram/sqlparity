@@ -22,8 +22,7 @@ import {
 } from '@/lib/scratchpad';
 
 const STARTER = `-- Drop a CSV or Parquet file on the left, then query it.
--- Nothing is uploaded; DuckDB is running inside this tab.
-SELECT 42 AS answer, 'it runs here' AS where_it_ran`;
+SELECT version() AS duckdb_version, current_date AS today`;
 
 interface LoadedFile {
   table: string;
