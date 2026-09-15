@@ -1,4 +1,5 @@
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import { arrowConverter, type ArrowFieldType } from './scratchpad';
 
 /**
  * Lazily start DuckDB, from this origin only.
@@ -103,10 +104,23 @@ export async function runQuery(
   const columns = table.schema.fields.map((field) => field.name);
   const totalRows = table.numRows;
 
+
+  // Decimals and dates come out of Arrow in a shape that is wrong to print; convert
+  // them here, where the column type is still to hand.
+  const convert = table.schema.fields.map((field) =>
+    arrowConverter(field.type as unknown as ArrowFieldType),
+  );
+
   const rows: unknown[][] = [];
   for (const row of table.toArray()) {
     if (rows.length >= cap) break;
-    rows.push(columns.map((column) => row[column]));
+    rows.push(
+      columns.map((column, i) => {
+        const value = row[column];
+        const converter = convert[i];
+        return converter ? converter(value) : value;
+      }),
+    );
   }
 
   return { columns, rows, totalRows, elapsedMs };

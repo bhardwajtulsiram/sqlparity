@@ -172,6 +172,69 @@ export function csvHeaderWarning(kind: FileKind, columns: string[]): string | nu
   return 'No header row was recognised, so the columns came back as column0, column1 and so on. That happens when rows hold different numbers of fields — usually an unquoted separator inside a value — and rows that did not fit may have been skipped. Check the row count against the file before trusting this.';
 }
 
+/* --------------------------------------------------- arrow value conversion */
+
+/**
+ * Arrow hands back three types in a shape that is wrong to show directly.
+ *
+ * A DECIMAL arrives as its unscaled integer — 1.005 comes through as 1005 — so
+ * printing the value verbatim puts a number on screen that is a thousand times too
+ * big. DATE and TIMESTAMP arrive as epoch milliseconds, which render as a
+ * thirteen-digit integer rather than a date. Both are exactly the kind of confident
+ * wrong answer this project refuses elsewhere, so the conversion happens where the
+ * column's type is still known, on the way out of Arrow.
+ *
+ * The ids are from the Arrow format itself rather than class names, which a
+ * production build is free to mangle.
+ */
+const ARROW_DECIMAL = 7;
+const ARROW_DATE = 8;
+const ARROW_TIMESTAMP = 10;
+
+export interface ArrowFieldType {
+  typeId?: number;
+  scale?: number;
+}
+
+/** Put the decimal point back into an unscaled integer. */
+export function scaleDecimal(digits: string, scale: number): string {
+  if (scale <= 0) return digits;
+  const negative = digits.startsWith('-');
+  const body = (negative ? digits.slice(1) : digits).padStart(scale + 1, '0');
+  const whole = body.slice(0, body.length - scale);
+  const fraction = body.slice(body.length - scale);
+  return `${negative ? '-' : ''}${whole}.${fraction}`;
+}
+
+/** Epoch milliseconds as a date, with no time part. */
+export function formatDate(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Epoch milliseconds as a timestamp, dropping a zero millisecond part. */
+export function formatTimestamp(ms: number): string {
+  const iso = new Date(ms).toISOString();
+  const body = iso.endsWith('.000Z') ? iso.slice(0, 19) : iso.slice(0, -1);
+  return body.replace('T', ' ');
+}
+
+/** A converter for one column, or null when the values need no adjusting. */
+export function arrowConverter(type: ArrowFieldType | undefined): ((value: unknown) => unknown) | null {
+  if (!type) return null;
+
+  if (type.typeId === ARROW_DECIMAL && typeof type.scale === 'number') {
+    const scale = type.scale;
+    return (value) => (value === null || value === undefined ? value : scaleDecimal(String(value), scale));
+  }
+  if (type.typeId === ARROW_DATE) {
+    return (value) => (typeof value === 'number' ? formatDate(value) : value);
+  }
+  if (type.typeId === ARROW_TIMESTAMP) {
+    return (value) => (typeof value === 'number' ? formatTimestamp(value) : value);
+  }
+  return null;
+}
+
 /** Human-readable byte size for the loading and file-list copy. */
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

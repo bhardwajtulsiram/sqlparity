@@ -77,7 +77,7 @@ const RULES: Rule[] = [
     title: 'SELECT * reads every column',
     why: 'Columnar stores like Snowflake, BigQuery, Redshift and Athena bill by bytes scanned, and reading a column you discard costs exactly as much as reading one you use. On a wide table this is usually the single largest avoidable cost in a query.',
     fix: 'Name the columns you actually need. If you are exploring, add a LIMIT so the scan stays small.',
-    test: has(/\bSELECT\s+\*/i),
+    test: has(/\bSELECT\s+(?:DISTINCT\s+|ALL\s+|TOP\s*\(?\s*\d+\s*\)?\s+)*\*/i),
   },
   {
     id: 'leading-wildcard-like',

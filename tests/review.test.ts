@@ -113,3 +113,28 @@ describe('reporting', () => {
     }
   });
 });
+
+describe('SELECT * variants', () => {
+  it('flags SELECT DISTINCT *, which still reads every column', () => {
+    expect(rules('SELECT DISTINCT * FROM t WHERE x = 1')).toContain('select-star');
+  });
+
+  it('flags SELECT TOP 10 *', () => {
+    expect(rules('SELECT TOP 10 * FROM t WHERE x = 1')).toContain('select-star');
+    expect(rules('SELECT TOP (10) * FROM t WHERE x = 1')).toContain('select-star');
+  });
+
+  it('flags SELECT ALL *', () => {
+    expect(rules('SELECT ALL * FROM t WHERE x = 1')).toContain('select-star');
+  });
+
+  it('does not mistake a multiplication for a star select', () => {
+    expect(rules('SELECT a * b AS product FROM t WHERE x = 1')).not.toContain('select-star');
+  });
+
+  it('still ignores a star inside a string', () => {
+    expect(rules("SELECT id FROM t WHERE note = 'SELECT * FROM x' AND y = 1")).not.toContain(
+      'select-star',
+    );
+  });
+});

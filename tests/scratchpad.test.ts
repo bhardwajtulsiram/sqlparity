@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  arrowConverter,
   csvHeaderWarning,
   csvSniffWarning,
   fileKind,
@@ -7,6 +8,9 @@ import {
   humanSize,
   loadSql,
   readerFor,
+  formatDate,
+  formatTimestamp,
+  scaleDecimal,
   shapeResult,
   tableNameFor,
 } from '../lib/scratchpad';
@@ -196,5 +200,49 @@ describe('csv header failures', () => {
 
   it('ignores formats that carry their own schema', () => {
     expect(csvHeaderWarning('parquet', ['column0', 'column1'])).toBeNull();
+  });
+});
+
+describe('arrow value conversion', () => {
+  it('puts the decimal point back', () => {
+    // Arrow hands back the unscaled integer, so 1.005 arrives as 1005.
+    expect(scaleDecimal('1005', 3)).toBe('1.005');
+    expect(scaleDecimal('-1005', 3)).toBe('-1.005');
+  });
+
+  it('pads a value smaller than its scale', () => {
+    expect(scaleDecimal('5', 3)).toBe('0.005');
+    expect(scaleDecimal('-5', 2)).toBe('-0.05');
+  });
+
+  it('leaves a scale of zero alone', () => {
+    expect(scaleDecimal('1005', 0)).toBe('1005');
+  });
+
+  it('renders epoch milliseconds as a date and a timestamp', () => {
+    expect(formatDate(1769817600000)).toBe('2026-01-31');
+    expect(formatTimestamp(1769862896000)).toBe('2026-01-31 12:34:56');
+  });
+
+  it('keeps a non-zero millisecond part', () => {
+    expect(formatTimestamp(1769862896123)).toBe('2026-01-31 12:34:56.123');
+  });
+
+  it('builds a converter from the column type', () => {
+    const dec = arrowConverter({ typeId: 7, scale: 3 })!;
+    expect(dec('1005')).toBe('1.005');
+    expect(arrowConverter({ typeId: 8 })!(1769817600000)).toBe('2026-01-31');
+    expect(arrowConverter({ typeId: 10 })!(1769862896000)).toBe('2026-01-31 12:34:56');
+  });
+
+  it('leaves types that need no adjusting alone', () => {
+    expect(arrowConverter({ typeId: 2 })).toBeNull();
+    expect(arrowConverter(undefined)).toBeNull();
+    expect(arrowConverter({ typeId: 7 })).toBeNull();
+  });
+
+  it('passes null straight through rather than converting it', () => {
+    expect(arrowConverter({ typeId: 7, scale: 2 })!(null)).toBeNull();
+    expect(arrowConverter({ typeId: 8 })!(null)).toBeNull();
   });
 });

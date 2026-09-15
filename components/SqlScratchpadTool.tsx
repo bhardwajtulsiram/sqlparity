@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { SqlEditor } from '@/components/SqlEditor';
+import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
 import { Button, CopyButton, Note, Panel } from '@/components/ui';
 import {
   csvHeaderWarning,
@@ -46,6 +46,22 @@ export function SqlScratchpadTool() {
 
   const db = useRef<AsyncDuckDB | null>(null);
   const conn = useRef<AsyncDuckDBConnection | null>(null);
+
+  const editor = useRef<SqlEditorApi | null>(null);
+
+  /**
+   * A mirror of the editor's text.
+   *
+   * Only a fallback for the first render, before SqlEditor has assigned its apiRef —
+   * `run` prefers the editor's own document, which is the authoritative copy. Keeping
+   * the text out of `run`'s dependencies also stops the Ctrl+Enter listener being torn
+   * down and re-added on every keystroke.
+   */
+  const sqlRef = useRef(sql);
+  const editSql = useCallback((next: string) => {
+    sqlRef.current = next;
+    setSql(next);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -136,17 +152,20 @@ export function SqlScratchpadTool() {
         setBusy(false);
       }
     },
-    [connection, files],
+    [connection, editSql, files],
   );
 
   const run = useCallback(async () => {
-    if (sql.trim() === '') return;
+    // The editor's own document is authoritative. sqlRef is the fallback for the
+    // moment before the editor has mounted.
+    const current = editor.current?.getText() ?? sqlRef.current;
+    if (current.trim() === '') return;
     setBusy(true);
     setQueryError(null);
     try {
       const connected = await connection();
       const { runQuery } = await import('@/lib/duckdb');
-      const outcome = await runQuery(connected, sql);
+      const outcome = await runQuery(connected, current);
       setResult(shapeResult(outcome.columns, outcome.rows, outcome.totalRows));
       setElapsed(outcome.elapsedMs);
     } catch (error) {
@@ -156,7 +175,7 @@ export function SqlScratchpadTool() {
     } finally {
       setBusy(false);
     }
-  }, [connection, sql]);
+  }, [connection]);
 
   // Ctrl/Cmd+Enter is what every SQL client binds to run.
   useEffect(() => {
@@ -267,7 +286,7 @@ export function SqlScratchpadTool() {
           </p>
         </Panel>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Panel
             step={2}
             title="Your query"
@@ -278,8 +297,9 @@ export function SqlScratchpadTool() {
             }
           >
             <SqlEditor
+              apiRef={editor}
               value={sql}
-              onChange={setSql}
+              onChange={editSql}
               dialectId="duckdb"
               placeholderText="SELECT * FROM your_table"
               minHeight="14rem"
@@ -412,9 +432,9 @@ function ResultTable({ result }: { result: QueryShape }) {
       {result.truncated && (
         <p className="mt-3 text-xs text-ink-500 dark:text-ink-400">
           Showing the first {MAX_DISPLAY_ROWS.toLocaleString()} of{' '}
-          {result.totalRows.toLocaleString()} rows. The engine returned all of them — only the
-          table below is capped, so the tab stays responsive. Add a LIMIT, or copy as TSV for the
-          lot.
+          {result.totalRows.toLocaleString()} rows, and copying gives you those same{' '}
+          {MAX_DISPLAY_ROWS.toLocaleString()}. Rendering them all would lock the tab. Narrow the
+          query with a filter, an aggregate or a LIMIT to see the rest.
         </p>
       )}
     </div>

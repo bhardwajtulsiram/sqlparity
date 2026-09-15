@@ -58,6 +58,15 @@ const theme = EditorView.theme({
 export interface SqlEditorApi {
   /** The text the user currently has selected, or '' when the selection is empty. */
   getSelection: () => string;
+  /**
+   * The editor's current document.
+   *
+   * CodeMirror observes contenteditable input through a MutationObserver, so a mirror
+   * of the text kept in React state can lag the document by a tick — long enough for a
+   * keyboard shortcut fired straight after typing to act on the previous text. Anything
+   * that executes what is on screen should read it from here.
+   */
+  getText: () => string;
 }
 
 /** A validation input plus the map back to real document positions. See lib/validate.ts. */
@@ -181,6 +190,7 @@ export function SqlEditor({
           const { from, to } = instance.state.selection.main;
           return from === to ? '' : instance.state.sliceDoc(from, to);
         },
+        getText: () => instance.state.doc.toString(),
       };
     }
 
