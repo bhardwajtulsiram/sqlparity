@@ -15,6 +15,8 @@ import {
   scaleDecimal,
   shapeResult,
   tableNameFor,
+  stripTrailingSemicolon,
+  toCsv,
   toTsv,
 } from '../lib/scratchpad';
 
@@ -311,5 +313,56 @@ describe('completion schema', () => {
     // table's columns within one keystroke of being accepted.
     expect(defaultCompletionTable(tables)).toBeUndefined();
     expect(defaultCompletionTable([])).toBeUndefined();
+  });
+});
+
+describe('csv export', () => {
+  it('writes a header row and comma-separated cells, CRLF terminated', () => {
+    expect(toCsv(['a', 'b'], [[1, 'two']])).toBe('a,b\n1,two');
+  });
+
+  it('quotes a value containing a comma rather than letting it become two columns', () => {
+    expect(toCsv(['a'], [['Acme, Inc.']])).toBe('a\n"Acme, Inc."');
+  });
+
+  it('doubles an embedded quote', () => {
+    expect(toCsv(['a'], [['say "hi"']])).toBe('a\n"say ""hi"""');
+  });
+
+  it('quotes a value containing a newline rather than letting it become two rows', () => {
+    expect(toCsv(['a'], [['one\ntwo']])).toBe('a\n"one\ntwo"');
+  });
+
+  it('keeps null and the empty string apart', () => {
+    // CSV has no NULL. An unquoted empty field is null; a quoted one is the empty
+    // string — the same convention PostgreSQL's own CSV export uses.
+    expect(toCsv(['a', 'b'], [[null, '']])).toBe('a,b\n,""');
+  });
+
+  it('does not turn a leading-zero value into a number', () => {
+    expect(toCsv(['zip'], [['007']])).toBe('zip\n007');
+  });
+
+  it('quotes a column name that needs it', () => {
+    expect(toCsv(['a,b'], [])).toBe('"a,b"');
+  });
+
+  it('handles a result with no rows', () => {
+    expect(toCsv(['a', 'b'], [])).toBe('a,b');
+  });
+});
+
+describe('statement tidying for export', () => {
+  it('drops a trailing semicolon so COPY can wrap the statement', () => {
+    expect(stripTrailingSemicolon('SELECT 1;')).toBe('SELECT 1');
+    expect(stripTrailingSemicolon('SELECT 1;  \n ')).toBe('SELECT 1');
+  });
+
+  it('leaves a statement without one alone', () => {
+    expect(stripTrailingSemicolon('SELECT 1')).toBe('SELECT 1');
+  });
+
+  it('does not touch a semicolon inside the statement', () => {
+    expect(stripTrailingSemicolon("SELECT ';' AS c")).toBe("SELECT ';' AS c");
   });
 });

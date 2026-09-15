@@ -189,6 +189,42 @@ export function toTsv(columns: string[], rows: unknown[][]): string {
   return [columns.join('\t'), ...rows.map((row) => row.map(cell).join('\t'))].join('\n');
 }
 
+/**
+ * Strip a trailing semicolon so a statement can be wrapped in COPY (...) TO.
+ *
+ * People end statements with a semicolon out of habit, and `COPY (SELECT 1;) TO`
+ * is a syntax error that would look like the export being broken.
+ */
+export function stripTrailingSemicolon(sql: string): string {
+  return sql.replace(/;\s*$/, '').trimEnd();
+}
+
+/**
+ * The result as CSV, used when DuckDB cannot write the file itself.
+ *
+ * Two conventions worth being deliberate about. CSV has no NULL, so an unquoted
+ * empty field means null and a quoted empty one means the empty string — the same
+ * distinction PostgreSQL's own CSV export makes, and one that matters more here than
+ * most places. And a value holding a comma, a quote or a line break is quoted with
+ * its quotes doubled, or it silently becomes extra columns in whatever opens it.
+ *
+ * Lines end LF, matching what DuckDB's own writer produces on the primary path, so
+ * the two routes cannot hand back files that differ only in line endings.
+ */
+export function toCsv(columns: string[], rows: unknown[][]): string {
+  const cell = (value: unknown): string => {
+    if (isNullCell(value)) return '';
+    const text = formatCell(value);
+    // A quoted empty field is how an empty string stays distinguishable from null.
+    if (text === '') return '""';
+    // A comma, a quote or a line break inside a value has to be quoted, or it turns
+    // into extra columns or extra rows in whatever opens the file.
+    return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+  };
+  const lines = [columns.map((name) => cell(name)), ...rows.map((row) => row.map(cell))];
+  return lines.map((line) => line.join(',')).join('\n');
+}
+
 /* ------------------------------------------------------------- completion */
 
 export interface LoadedTable {

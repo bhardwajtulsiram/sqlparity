@@ -1,5 +1,5 @@
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { arrowConverter, type ArrowFieldType } from './scratchpad';
+import { arrowConverter, stripTrailingSemicolon, type ArrowFieldType } from './scratchpad';
 
 /**
  * Lazily start DuckDB, from this origin only.
@@ -124,6 +124,40 @@ export async function runQuery(
   }
 
   return { columns, rows, totalRows, elapsedMs };
+}
+
+/**
+ * Write the query's full result as CSV, using DuckDB's own writer.
+ *
+ * Deliberately not built from the rows on screen. Those are capped twice — 2,000 out
+ * of Arrow and 500 rendered — so a file assembled from them would silently hand back
+ * a fraction of a large result, which is the failure mode this project exists to
+ * refuse. COPY streams every row inside the engine, and DuckDB's CSV writer already
+ * knows how to quote a value containing a comma, a quote or a newline.
+ *
+ * The file is written into DuckDB's in-memory filesystem and dropped afterwards, so
+ * nothing touches the disk until the browser saves it.
+ */
+export async function exportCsv(
+  db: AsyncDuckDB,
+  connection: AsyncDuckDBConnection,
+  sql: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const name = `sqlparity-export-${Date.now()}.csv`;
+  const statement = stripTrailingSemicolon(sql);
+
+  await connection.query(`COPY (${statement}) TO '${name}' (FORMAT CSV, HEADER)`);
+  try {
+    const bytes = await db.copyFileToBuffer(name);
+    // Copy into a plain ArrayBuffer. The engine's buffer can be shared memory, which
+    // Blob refuses, and the copy is freed with the file below either way.
+    const owned = new Uint8Array(bytes.byteLength);
+    owned.set(bytes);
+    return owned;
+  } finally {
+    // Otherwise every export leaks a copy of the result into the engine's memory.
+    await db.dropFile(name).catch(() => {});
+  }
 }
 
 /** Register a dropped file with the engine without reading it into memory. */

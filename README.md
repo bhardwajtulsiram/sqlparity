@@ -105,6 +105,17 @@ Two different caps, which are easy to confuse:
 The row count reported is neither of those — it comes from Arrow's own metadata, so a query that
 produced 50,000 rows says 50,000 while showing 500.
 
+**Download CSV** asks DuckDB to write the file with `COPY ... TO`, so it holds every row rather
+than the 500 on screen — assembling it from the rendered rows would hand back a fraction of a
+large result without saying so. It re-runs the statement that produced the visible result, not
+whatever the editor holds now, or editing the query without running it would download data the
+table never showed. `COPY` can only wrap one query, so several statements at once, or something
+that is not a `SELECT`, falls back to building the file from the rows in hand and says when that
+means fewer of them.
+
+CSV has no NULL, so an unquoted empty field is null and a quoted one is the empty string — the
+convention PostgreSQL's own CSV export uses. Lines end LF on both paths.
+
 Values are converted on the way out of Arrow, where the column type is still known, because three
 types arrive in a shape that is wrong to print. A `DECIMAL` comes through as its unscaled integer,
 so `1.005` would render as `1005`; `DATE` and `TIMESTAMP` arrive as epoch milliseconds and would

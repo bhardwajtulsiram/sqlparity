@@ -17,6 +17,7 @@ import {
   MAX_DISPLAY_ROWS,
   shapeResult,
   tableNameFor,
+  toCsv,
   toTsv,
   type QueryShape,
 } from '@/lib/scratchpad';
@@ -60,6 +61,16 @@ export function SqlScratchpadTool() {
    * down and re-added on every keystroke.
    */
   const sqlRef = useRef(sql);
+
+  /**
+   * The statement that produced the result currently on screen.
+   *
+   * The export must re-run this, not whatever the editor holds now. Reading the live
+   * document instead means editing the query without re-running it and then hitting
+   * Download hands back a file for a query that was never run, while the table on
+   * screen still shows the old one.
+   */
+  const ranSql = useRef<string | null>(null);
   const editSql = useCallback((next: string) => {
     sqlRef.current = next;
     setSql(next);
@@ -168,9 +179,11 @@ export function SqlScratchpadTool() {
       const connected = await connection();
       const { runQuery } = await import('@/lib/duckdb');
       const outcome = await runQuery(connected, current);
+      ranSql.current = current;
       setResult(shapeResult(outcome.columns, outcome.rows, outcome.totalRows));
       setElapsed(outcome.elapsedMs);
     } catch (error) {
+      ranSql.current = null;
       setResult(null);
       setElapsed(null);
       setQueryError(error instanceof Error ? error.message : String(error));
@@ -196,6 +209,51 @@ export function SqlScratchpadTool() {
   }, [run]);
 
   const resultText = useMemo(() => (result ? toTsv(result.columns, result.rows) : ''), [result]);
+
+  /**
+   * Save the result as CSV.
+   *
+   * Asks DuckDB to write it, so the file holds every row rather than the 500 on
+   * screen. COPY can only wrap a single query, so a statement it refuses — several
+   * statements at once, or something that is not a SELECT — falls back to building
+   * the file from the rows in hand, and says so rather than quietly handing over a
+   * truncated file.
+   */
+  const downloadCsv = useCallback(async () => {
+    if (!result || !ranSql.current) return;
+    setBusy(true);
+    try {
+      let text: string | Uint8Array<ArrayBuffer>;
+      let capped = false;
+      try {
+        const connected = await connection();
+        const instance = db.current;
+        if (!instance) throw new Error('The engine is not running.');
+        const { exportCsv } = await import('@/lib/duckdb');
+        text = await exportCsv(instance, connected, ranSql.current);
+      } catch {
+        text = toCsv(result.columns, result.rows);
+        capped = result.truncated;
+      }
+
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'query-result.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+
+      setLoadWarnings(
+        capped
+          ? [
+              `The engine could not write the file for this statement, so the download holds the ${result.rows.length.toLocaleString()} rows on screen rather than all ${result.totalRows.toLocaleString()}. Wrap it in a single SELECT to get the lot.`,
+            ]
+          : [],
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [connection, result]);
 
   // What the editor should suggest: only tables that are actually loaded.
   const schema = useMemo(() => completionSchema(files), [files]);
@@ -323,7 +381,16 @@ export function SqlScratchpadTool() {
                 ? `${result.totalRows.toLocaleString()} row${result.totalRows === 1 ? '' : 's'} in ${elapsed.toFixed(0)} ms`
                 : undefined
             }
-            actions={result ? <CopyButton text={resultText} label="Copy as TSV" /> : undefined}
+            actions={
+              result ? (
+                <>
+                  <Button onClick={() => void downloadCsv()} disabled={busy}>
+                    Download CSV
+                  </Button>
+                  <CopyButton text={resultText} label="Copy as TSV" />
+                </>
+              ) : undefined
+            }
           >
             {engine === 'starting' && (
               <Note>
