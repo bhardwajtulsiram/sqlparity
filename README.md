@@ -81,6 +81,26 @@ drops rows that do not fit and names the rest `column0`, `column1`. Both tells a
 [`lib/scratchpad.ts`](lib/scratchpad.ts) and reported, because a table that loads successfully
 while missing rows is the exact failure this project exists to refuse.
 
+### Completion
+
+The editors offer keyword completion, and on the scratchpad the names of whatever you have
+loaded. The schema comes from the tables DuckDB actually holds, not from parsing the SQL, so a
+suggested column always exists — suggesting a name that does not is worse than suggesting
+nothing. With exactly one table loaded its columns complete unprefixed; with several, only
+`table.` does, because a bare name then belongs to no particular table and picking one would
+put the wrong table's columns a keystroke away.
+
+Two details in [`components/SqlEditor.tsx`](components/SqlEditor.tsx) are load-bearing:
+
+- **Tab accepts, not Enter.** CodeMirror's default binds Enter, which in a SQL editor means
+  pressing Enter for a newline can silently insert a keyword. Tab falls through to normal focus
+  movement when no popup is open, so keyboard users are not trapped.
+- **The language extension lives in a Compartment.** Dropping a second file swaps the schema in
+  place; rebuilding the editor would throw away undo history and the cursor.
+
+The bulk generator's template editor deliberately has completion off — it is full of
+`{{placeholders}}`, where a completion list over a half-typed variable name is noise.
+
 ### Reviewing and converting without a model
 
 The comparable hosted tools do both of these by sending the query to a language model. That is a
@@ -140,7 +160,7 @@ pointer to the `.sql` download for the full text.
 | --- | --- |
 | `next`, `react` | Static-export app |
 | `sql-formatter` | Formatting, 16 dialects |
-| `@codemirror/*` | Editor (~112 KB gz against Monaco's ~937 KB) |
+| `@codemirror/*` | Editor, with SQL keyword and schema completion (~112 KB gz against Monaco's ~937 KB) |
 | `write-excel-file` | `.xlsx` export (~19 KB gz) |
 | `fflate` | Zip for the numbered `.sql` set |
 | `dt-sql-parser` | ANTLR grammars behind DDL parsing and syntax validation |

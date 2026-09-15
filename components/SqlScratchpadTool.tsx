@@ -5,7 +5,9 @@ import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
 import { Button, CopyButton, Note, Panel } from '@/components/ui';
 import {
+  completionSchema,
   csvHeaderWarning,
+  defaultCompletionTable,
   csvSniffWarning,
   fileKind,
   formatCell,
@@ -139,7 +141,7 @@ export function SqlScratchpadTool() {
         if (loaded.length > 0) {
           setFiles((current) => [...current, ...loaded]);
           // Land on something that runs, so the first result is one click away.
-          setSql(`SELECT *\nFROM "${loaded[0].table}"\nLIMIT 100`);
+          editSql(`SELECT *\nFROM "${loaded[0].table}"\nLIMIT 100`);
         }
         if (rejected.length > 0) {
           warnings.push(
@@ -191,6 +193,10 @@ export function SqlScratchpadTool() {
   }, [run]);
 
   const resultText = useMemo(() => (result ? toTsv(result.columns, result.rows) : ''), [result]);
+
+  // What the editor should suggest: only tables that are actually loaded.
+  const schema = useMemo(() => completionSchema(files), [files]);
+  const defaultTable = useMemo(() => defaultCompletionTable(files), [files]);
 
   return (
     <div className="space-y-5">
@@ -298,6 +304,9 @@ export function SqlScratchpadTool() {
               dialectId="duckdb"
               placeholderText="SELECT * FROM your_table"
               minHeight="14rem"
+              complete
+              schema={schema}
+              defaultTable={defaultTable}
             />
           </Panel>
 

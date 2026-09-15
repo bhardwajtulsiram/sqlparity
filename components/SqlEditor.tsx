@@ -1,11 +1,18 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
+import {
+  acceptCompletion,
+  autocompletion,
+  closeCompletion,
+  moveCompletionSelection,
+  startCompletion,
+} from '@codemirror/autocomplete';
 import {
   sql,
   MSSQL,
@@ -53,7 +60,54 @@ const theme = EditorView.theme({
     textDecoration: 'underline wavy oklch(0.58 0.22 25)',
     textDecorationSkipInk: 'none',
   },
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    border: '1px solid var(--border-card)',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    backgroundColor: 'var(--surface-card)',
+    boxShadow: 'var(--shadow-card)',
+  },
+  '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', fontSize: '12.5px' },
+  '.cm-tooltip-autocomplete > ul > li': { padding: '3px 10px' },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    backgroundColor: 'var(--color-accent-600)',
+    color: '#fff',
+  },
+  '.cm-completionDetail': { marginLeft: '1rem', opacity: 0.6, fontStyle: 'normal' },
 });
+
+/**
+ * Table and column names to offer, as table name -> column names.
+ *
+ * A plain record rather than CodeMirror's SQLNamespace: callers here only ever have
+ * flat tables, and the narrower type keeps the conversion in one place.
+ */
+export type SqlSchema = Record<string, string[]>;
+
+/** The SQL language extension for a dialect, optionally knowing about some tables. */
+function sqlSupport(dialectId: string, schema?: SqlSchema, defaultTable?: string) {
+  return sql({
+    dialect: CM_DIALECTS[dialectId] ?? StandardSQL,
+    upperCaseKeywords: false,
+    ...(schema && Object.keys(schema).length > 0 ? { schema } : {}),
+    // Only useful with exactly one table; with several, an unprefixed column name is
+    // ambiguous and suggesting one table's columns would be a guess.
+    ...(defaultTable ? { defaultTable } : {}),
+  });
+}
+
+/**
+ * A stable identity for a schema object.
+ *
+ * The caller rebuilds the record on every render, so comparing by reference would
+ * reconfigure the editor on each keystroke — which closes any open completion popup.
+ */
+function schemaKey(schema?: SqlSchema): string {
+  if (!schema) return '';
+  return Object.entries(schema)
+    .map(([table, columns]) => `${table}:${columns.join(',')}`)
+    .join('|');
+}
 
 export interface SqlEditorApi {
   /** The text the user currently has selected, or '' when the selection is empty. */
@@ -128,6 +182,9 @@ export function SqlEditor({
   apiRef,
   lint = false,
   lintPrepare,
+  schema,
+  defaultTable,
+  complete = false,
 }: {
   value: string;
   onChange?: (next: string) => void;
@@ -140,9 +197,18 @@ export function SqlEditor({
   lint?: boolean;
   /** Transform the document before validating it — used to probe a {{templated}} query. */
   lintPrepare?: (text: string) => LintPrepared;
+  /** Tables and their columns to suggest. Changing it reconfigures in place. */
+  schema?: SqlSchema;
+  /** Table whose columns complete without needing the table prefix. */
+  defaultTable?: string;
+  /** Opt in to completion. Off by default so a template editor keeps Tab and Enter. */
+  complete?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  // Holds the language extension so a new schema can be swapped in without tearing
+  // the editor down, which would throw away undo history and the cursor.
+  const languageSlot = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const lintPrepareRef = useRef(lintPrepare);
@@ -157,8 +223,7 @@ export function SqlEditor({
       history(),
       highlightActiveLine(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
-      sql({ dialect: CM_DIALECTS[dialectId] ?? StandardSQL, upperCaseKeywords: false }),
+      languageSlot.current.of(sqlSupport(dialectId, schema, defaultTable)),
       EditorView.lineWrapping,
       theme,
       EditorView.editable.of(!readOnly),
@@ -167,6 +232,23 @@ export function SqlEditor({
         if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
       }),
     ];
+    if (complete) {
+      // defaultKeymap is off deliberately. CodeMirror binds Enter to accept a
+      // completion, which in a SQL editor means pressing Enter for a newline can
+      // silently insert a keyword instead. Tab accepts, and falls through to normal
+      // focus movement when no popup is open, so keyboard users are not trapped.
+      extensions.push(
+        autocompletion({ defaultKeymap: false, icons: false, closeOnBlur: true }),
+        keymap.of([
+          { key: 'Tab', run: acceptCompletion },
+          { key: 'Escape', run: closeCompletion },
+          { key: 'ArrowDown', run: moveCompletionSelection(true) },
+          { key: 'ArrowUp', run: moveCompletionSelection(false) },
+          { key: 'Mod-Space', run: startCompletion },
+        ]),
+      );
+    }
+    extensions.push(keymap.of([...defaultKeymap, ...historyKeymap]));
     if (placeholderText) extensions.push(placeholder(placeholderText));
     if (lint && supportsValidation(dialectId)) {
       extensions.push(
@@ -203,6 +285,17 @@ export function SqlEditor({
     // changes are applied by the effect below without tearing down the editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialectId, readOnly, placeholderText, lint]);
+
+  // Swap in a new schema when tables are loaded or removed, in place.
+  useEffect(() => {
+    const instance = view.current;
+    if (!instance) return;
+    instance.dispatch({
+      effects: languageSlot.current.reconfigure(sqlSupport(dialectId, schema, defaultTable)),
+    });
+    // The schema object is rebuilt by the caller on every render; compare its contents.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialectId, schemaKey(schema), defaultTable]);
 
   // Apply external value changes (formatting, presets, clearing) without disturbing
   // the cursor when the document already matches.

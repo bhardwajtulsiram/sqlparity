@@ -78,6 +78,7 @@ export function SqlConverterTool() {
             onChange={setInput}
             dialectId={fromId}
             placeholderText="Paste the query you want to move"
+            complete
             minHeight="40vh"
           />
         </Panel>

@@ -189,6 +189,36 @@ export function toTsv(columns: string[], rows: unknown[][]): string {
   return [columns.join('\t'), ...rows.map((row) => row.map(cell).join('\t'))].join('\n');
 }
 
+/* ------------------------------------------------------------- completion */
+
+export interface LoadedTable {
+  table: string;
+  columns: string[];
+}
+
+/**
+ * The tables and columns to offer as completions.
+ *
+ * Built from what is actually loaded rather than from the SQL text, so a column only
+ * ever appears in the list if querying it would work. Suggesting a name that does not
+ * exist is worse than suggesting nothing.
+ */
+export function completionSchema(tables: readonly LoadedTable[]): Record<string, string[]> {
+  const schema: Record<string, string[]> = {};
+  for (const { table, columns } of tables) schema[table] = [...columns];
+  return schema;
+}
+
+/**
+ * The table whose columns can be completed without a prefix.
+ *
+ * Only when there is exactly one. With several loaded, a bare column name belongs to
+ * no particular table, and picking one would put the wrong table's columns in reach.
+ */
+export function defaultCompletionTable(tables: readonly LoadedTable[]): string | undefined {
+  return tables.length === 1 ? tables[0].table : undefined;
+}
+
 /* --------------------------------------------------- arrow value conversion */
 
 /**

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   arrowConverter,
+  completionSchema,
+  defaultCompletionTable,
   csvHeaderWarning,
   csvSniffWarning,
   fileKind,
@@ -272,5 +274,42 @@ describe('clipboard payload', () => {
 
   it('handles a result with no rows', () => {
     expect(toTsv(['a', 'b'], [])).toBe('a\tb');
+  });
+});
+
+describe('completion schema', () => {
+  const tables = [
+    { table: 'orders', columns: ['account', 'zip', 'total'] },
+    { table: 'people', columns: ['name', 'age'] },
+  ];
+
+  it('maps each loaded table to its columns', () => {
+    expect(completionSchema(tables)).toEqual({
+      orders: ['account', 'zip', 'total'],
+      people: ['name', 'age'],
+    });
+  });
+
+  it('offers nothing when nothing is loaded', () => {
+    expect(completionSchema([])).toEqual({});
+  });
+
+  it('copies the column arrays rather than aliasing them', () => {
+    // The caller holds these in React state; the editor must not be able to mutate them.
+    const source = [{ table: 't', columns: ['a'] }];
+    const schema = completionSchema(source);
+    schema.t.push('injected');
+    expect(source[0].columns).toEqual(['a']);
+  });
+
+  it('completes unprefixed columns only when one table is loaded', () => {
+    expect(defaultCompletionTable([tables[0]])).toBe('orders');
+  });
+
+  it('refuses to pick a default when several tables are loaded', () => {
+    // A bare column name belongs to no particular table; guessing puts the wrong
+    // table's columns within one keystroke of being accepted.
+    expect(defaultCompletionTable(tables)).toBeUndefined();
+    expect(defaultCompletionTable([])).toBeUndefined();
   });
 });

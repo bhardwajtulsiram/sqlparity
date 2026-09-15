@@ -95,6 +95,7 @@ export function QueryOptimizerTool() {
             onChange={setInput}
             dialectId={dialectId}
             placeholderText="Paste a query here"
+            complete
             minHeight="50vh"
             lint
           />

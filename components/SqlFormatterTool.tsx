@@ -100,6 +100,7 @@ export function SqlFormatterTool() {
             onChange={setInput}
             dialectId={dialectId}
             placeholderText="Paste SQL here"
+            complete
             minHeight="50vh"
             lint
           />
