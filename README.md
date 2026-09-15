@@ -105,6 +105,17 @@ Two different caps, which are easy to confuse:
 The row count reported is neither of those — it comes from Arrow's own metadata, so a query that
 produced 50,000 rows says 50,000 while showing 500.
 
+Measured limits, so nobody has to rediscover them. A 500,000 row CSV loads in about 3 seconds and
+`SELECT *` over it answers in under half a second, showing 500 rows and reporting 500,000. At 5
+million rows it still shows 500 and still reports the real count, but the tab freezes for about
+three seconds and the heap reaches roughly 650 MB.
+
+The cause is that `connection.query` pulls the whole result into an Arrow table before either cap
+applies — the caps bound what becomes JavaScript and what reaches the DOM, not what the engine
+hands over. `connection.send` would stream it and keep memory flat, at the cost of Arrow's row
+count, which would then need a separate `count(*)`. Left alone deliberately: the sizes this tool
+is actually for are comfortable, and the honest row count is worth more than a faster worst case.
+
 **Download CSV** asks DuckDB to write the file with `COPY ... TO`, so it holds every row rather
 than the 500 on screen — assembling it from the rendered rows would hand back a fraction of a
 large result without saying so. It re-runs the statement that produced the visible result, not
