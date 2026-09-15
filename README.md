@@ -81,6 +81,36 @@ drops rows that do not fit and names the rest `column0`, `column1`. Both tells a
 [`lib/scratchpad.ts`](lib/scratchpad.ts) and reported, because a table that loads successfully
 while missing rows is the exact failure this project exists to refuse.
 
+### The result grid
+
+`Ctrl`/`Cmd`+`Enter` runs the query. That is bound inside CodeMirror rather than on the window,
+and the reason is worth keeping: `defaultKeymap` binds `Mod-Enter` to `insertBlankLine`, which
+runs on the editor element while the event is still bubbling — so a `preventDefault` further up
+arrives after the blank line has been inserted. The window listener is still there for when focus
+is outside the editor, but it ignores an event the editor already handled, or the query runs
+twice.
+
+Rows are numbered, and the number column pins to the left edge: knowing which row you are looking
+at matters most when a wide result has been scrolled sideways. It is a display aid rather than
+part of the result, so **Copy as TSV** gives the columns the query actually returned and no
+phantom index column.
+
+Two different caps, which are easy to confuse:
+
+- **2,000 rows are copied out of Arrow** ([`lib/duckdb.ts`](lib/duckdb.ts)). DuckDB answers
+  `SELECT * FROM a_ten_million_row_parquet` almost instantly; it is turning those rows into
+  JavaScript that locks the tab.
+- **500 of those are rendered** ([`lib/scratchpad.ts`](lib/scratchpad.ts)).
+
+The row count reported is neither of those — it comes from Arrow's own metadata, so a query that
+produced 50,000 rows says 50,000 while showing 500.
+
+Values are converted on the way out of Arrow, where the column type is still known, because three
+types arrive in a shape that is wrong to print. A `DECIMAL` comes through as its unscaled integer,
+so `1.005` would render as `1005`; `DATE` and `TIMESTAMP` arrive as epoch milliseconds and would
+render as thirteen-digit integers. The conversion keys on the Arrow format's numeric type ids
+rather than class names, which a production build is free to mangle.
+
 ### Completion
 
 The editors offer keyword completion, and on the scratchpad the names of whatever you have
