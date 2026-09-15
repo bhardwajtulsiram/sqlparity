@@ -1,0 +1,21 @@
+# Security headers, for hosts that read this file (Netlify, Cloudflare Pages).
+#
+# The same policy is also a meta tag in the page, because a static export has no
+# server to send headers and some hosts ignore this file. Where both apply the
+# browser enforces both, and they are identical apart from the directives below that
+# a meta tag cannot express.
+#
+# If you host somewhere that wants a different format — vercel.json, an nginx block,
+# an S3/CloudFront function — the policy string is the same; only the wrapper changes.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  # frame-ancestors: nobody may embed this site in an iframe. Stops a lookalike page
+  # wrapping the real tool and reading what is typed into it.
+  X-Frame-Options: DENY
+  # Stops a browser guessing a file is script when it was served as something else.
+  X-Content-Type-Options: nosniff
+  # Do not leak which page someone came from when they follow a link away.
+  Referrer-Policy: no-referrer
+  # Nothing here needs a camera, a microphone or a location.
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()

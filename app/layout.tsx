@@ -30,6 +30,45 @@ const mono = IBM_Plex_Mono({
   display: 'swap',
 });
 
+/**
+ * Content Security Policy, shipped with the page.
+ *
+ * The product's claim is that nothing you paste leaves the tab. That is true because
+ * of how the code is written — but "true because I wrote it carefully" is a weaker
+ * guarantee than "the browser will not permit otherwise". `connect-src 'self'` is the
+ * directive that matters: it forbids this page from opening a request to any other
+ * origin, so a dependency that turned malicious in some future update still could not
+ * send a schema anywhere. The claim stops depending on my diligence.
+ *
+ * Two allowances are deliberate and worth knowing about:
+ *
+ *   'wasm-unsafe-eval'  DuckDB is WebAssembly, and compiling it needs this. It permits
+ *                       WASM compilation only, not JavaScript eval.
+ *   'unsafe-inline'     Next inlines its hydration data as a script tag, and a static
+ *                       export has no server to mint a nonce per request. This weakens
+ *                       the cross-site-scripting protection, which matters less here
+ *                       than usual: nothing in this app ever renders user input as
+ *                       markup, so there is no injection point to exploit.
+ *
+ * Set as a meta tag because a static export has no server to send headers, and it must
+ * be http-equiv — Next's `metadata.other` emits name=, which browsers ignore for this.
+ * public/_headers carries the same policy for hosts that read it, plus the directives
+ * a meta tag cannot express.
+ */
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  // The one that enforces the promise.
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ');
+
 export const metadata: Metadata = {
   title: {
     default: 'SQLParity — SQL tools that never see your data',
@@ -43,6 +82,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+      {/*
+        Rendered here rather than through the metadata export, which emits name= and
+        is silently ignored by browsers for this header. A policy that looks present
+        but is not enforced is worse than none, because you stop looking.
+      */}
+      <meta httpEquiv="Content-Security-Policy" content={CONTENT_SECURITY_POLICY} />
       <body className="min-h-screen antialiased">
         <SiteHeader />
         <StorageBanner />

@@ -153,6 +153,30 @@ Two details in [`components/SqlEditor.tsx`](components/SqlEditor.tsx) are load-b
 The bulk generator's template editor deliberately has completion off — it is full of
 `{{placeholders}}`, where a completion list over a half-typed variable name is noise.
 
+### Enforcing the privacy claim
+
+Nothing leaves the tab because of how the code is written. That is a weaker guarantee than the
+browser refusing to allow otherwise, so the pages ship a Content Security Policy whose important
+line is `connect-src 'self'`: this origin may not open a request to any other. A dependency that
+turned malicious in a future update still could not send a schema anywhere.
+
+Verified rather than assumed — `fetch`, `XMLHttpRequest`, `sendBeacon`, an image pixel and an
+injected remote script were all blocked, with a `securitypolicyviolation` event naming
+`connect-src`, while same-origin requests kept working. Note that `sendBeacon` returns `true` even
+when blocked: it reports that the request was queued, not that it was delivered, so the violation
+event is the signal to trust.
+
+Two details that are easy to get wrong:
+
+- It must be `<meta http-equiv>`. Next's `metadata.other` emits `name=`, which browsers ignore
+  for this header — a policy that looks present while enforcing nothing.
+- `'wasm-unsafe-eval'` is required for DuckDB and permits WASM compilation only, not JavaScript
+  `eval`. `'unsafe-inline'` for scripts is needed because a static export has no server to mint a
+  nonce; it costs less here than usual, since nothing in this app renders user input as markup.
+
+[`public/_headers`](public/_headers) carries the same policy for hosts that read it, plus
+`frame-ancestors` and the other headers a meta tag cannot express.
+
 ### Reviewing and converting without a model
 
 The comparable hosted tools do both of these by sending the query to a language model. That is a
