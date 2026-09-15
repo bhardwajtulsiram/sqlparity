@@ -185,6 +185,7 @@ export function SqlEditor({
   schema,
   defaultTable,
   complete = false,
+  onRun,
 }: {
   value: string;
   onChange?: (next: string) => void;
@@ -203,6 +204,15 @@ export function SqlEditor({
   defaultTable?: string;
   /** Opt in to completion. Off by default so a template editor keeps Tab and Enter. */
   complete?: boolean;
+  /**
+   * Run the query. Bound to Mod-Enter inside the editor.
+   *
+   * This has to be a CodeMirror binding rather than a window listener: defaultKeymap
+   * binds Mod-Enter to insertBlankLine, which runs on the editor element while the
+   * event is still bubbling, so a preventDefault further up arrives after the blank
+   * line has already been inserted.
+   */
+  onRun?: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -211,6 +221,8 @@ export function SqlEditor({
   const languageSlot = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onRunRef = useRef(onRun);
+  onRunRef.current = onRun;
   const lintPrepareRef = useRef(lintPrepare);
   lintPrepareRef.current = lintPrepare;
 
@@ -232,6 +244,21 @@ export function SqlEditor({
         if (update.docChanged) onChangeRef.current?.(update.state.doc.toString());
       }),
     ];
+    // Ahead of defaultKeymap, so this wins over insertBlankLine. Returning true tells
+    // CodeMirror the key was handled, which is what suppresses the newline.
+    extensions.push(
+      keymap.of([
+        {
+          key: 'Mod-Enter',
+          run: () => {
+            if (!onRunRef.current) return false;
+            onRunRef.current();
+            return true;
+          },
+        },
+      ]),
+    );
+
     if (complete) {
       // defaultKeymap is off deliberately. CodeMirror binds Enter to accept a
       // completion, which in a SQL editor means pressing Enter for a newline can

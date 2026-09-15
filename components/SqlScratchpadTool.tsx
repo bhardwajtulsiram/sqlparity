@@ -180,9 +180,13 @@ export function SqlScratchpadTool() {
     }
   }, [connection]);
 
-  // Ctrl/Cmd+Enter is what every SQL client binds to run.
+  // Ctrl/Cmd+Enter is what every SQL client binds to run. The editor binds it too, for
+  // the case where it has focus; this covers the rest of the page.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // The editor already ran it and marked the event handled. Without this the
+      // query would run twice whenever the editor had focus.
+      if (event.defaultPrevented) return;
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         event.preventDefault();
         void run();
@@ -305,6 +309,7 @@ export function SqlScratchpadTool() {
               placeholderText="SELECT * FROM your_table"
               minHeight="14rem"
               complete
+              onRun={run}
               schema={schema}
               defaultTable={defaultTable}
             />
@@ -392,8 +397,18 @@ function ResultTable({ result }: { result: QueryShape }) {
         style={{ borderColor: 'var(--code-border)', background: 'var(--code-surface)', maxHeight: '26rem' }}
       >
         <table className="w-full border-collapse font-mono text-[12.5px]">
-          <thead className="sticky top-0">
+          <thead className="sticky top-0 z-20">
             <tr>
+              {/* The row number column pins left, so it stays readable while a wide
+                  result is scrolled sideways — which is when knowing which row you
+                  are looking at matters most. */}
+              <th
+                scope="col"
+                className="sticky left-0 z-10 px-3 py-2 text-right font-normal select-none"
+                style={{ background: 'var(--code-header)', color: 'var(--syn-comment)' }}
+              >
+                #
+              </th>
               {result.columns.map((column) => (
                 <th
                   key={column}
@@ -409,6 +424,16 @@ function ResultTable({ result }: { result: QueryShape }) {
           <tbody>
             {result.rows.map((row, i) => (
               <tr key={i} style={{ borderTop: '1px solid var(--code-border)' }}>
+                <td
+                  className="sticky left-0 px-3 py-1.5 text-right tabular-nums select-none"
+                  style={{
+                    background: 'var(--code-surface)',
+                    color: 'var(--syn-comment)',
+                    borderRight: '1px solid var(--code-border)',
+                  }}
+                >
+                  {i + 1}
+                </td>
                 {row.map((cell, j) => (
                   <td
                     key={j}
