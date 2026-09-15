@@ -13,6 +13,7 @@ import {
   scaleDecimal,
   shapeResult,
   tableNameFor,
+  toTsv,
 } from '../lib/scratchpad';
 
 describe('file kinds', () => {
@@ -244,5 +245,32 @@ describe('arrow value conversion', () => {
   it('passes null straight through rather than converting it', () => {
     expect(arrowConverter({ typeId: 7, scale: 2 })!(null)).toBeNull();
     expect(arrowConverter({ typeId: 8 })!(null)).toBeNull();
+  });
+});
+
+describe('clipboard payload', () => {
+  it('writes a header row and tab-separated cells', () => {
+    expect(toTsv(['a', 'b'], [[1, 'two'], [3, 'four']])).toBe('a\tb\n1\ttwo\n3\tfour');
+  });
+
+  it('keeps NULL distinguishable from an empty string', () => {
+    expect(toTsv(['a', 'b'], [[null, '']])).toBe('a\tb\nNULL\t');
+  });
+
+  it('escapes a tab inside a value rather than splitting the column', () => {
+    // Pasted raw into a spreadsheet, a literal tab here would become a new column.
+    expect(toTsv(['a'], [['x\ty']])).toBe('a\nx\\ty');
+  });
+
+  it('escapes a newline inside a value rather than splitting the row', () => {
+    expect(toTsv(['a'], [['x\ny']])).toBe('a\nx\\ny');
+  });
+
+  it('escapes a backslash so the escaping stays reversible', () => {
+    expect(toTsv(['a'], [['C:\\tmp']])).toBe('a\nC:\\\\tmp');
+  });
+
+  it('handles a result with no rows', () => {
+    expect(toTsv(['a', 'b'], [])).toBe('a\tb');
   });
 });

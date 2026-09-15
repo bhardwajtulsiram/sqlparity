@@ -15,6 +15,7 @@ import {
   MAX_DISPLAY_ROWS,
   shapeResult,
   tableNameFor,
+  toTsv,
   type QueryShape,
 } from '@/lib/scratchpad';
 
@@ -189,13 +190,7 @@ export function SqlScratchpadTool() {
     return () => window.removeEventListener('keydown', onKey);
   }, [run]);
 
-  const resultText = useMemo(() => {
-    if (!result) return '';
-    return [
-      result.columns.join('\t'),
-      ...result.rows.map((row) => row.map(formatCell).join('\t')),
-    ].join('\n');
-  }, [result]);
+  const resultText = useMemo(() => (result ? toTsv(result.columns, result.rows) : ''), [result]);
 
   return (
     <div className="space-y-5">

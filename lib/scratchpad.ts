@@ -172,6 +172,23 @@ export function csvHeaderWarning(kind: FileKind, columns: string[]): string | nu
   return 'No header row was recognised, so the columns came back as column0, column1 and so on. That happens when rows hold different numbers of fields — usually an unquoted separator inside a value — and rows that did not fit may have been skipped. Check the row count against the file before trusting this.';
 }
 
+/**
+ * The result as tab-separated text, for the clipboard.
+ *
+ * Tabs rather than commas because the destination is almost always a spreadsheet or a
+ * chat message, and a comma inside a value would silently split a column there. A tab
+ * or newline inside a value would do the same, so those are shown as escapes instead
+ * of being pasted as real whitespace.
+ */
+export function toTsv(columns: string[], rows: unknown[][]): string {
+  const cell = (value: unknown) =>
+    formatCell(value)
+      .replaceAll('\\', '\\\\')
+      .replaceAll('\t', '\\t')
+      .replaceAll('\n', '\\n');
+  return [columns.join('\t'), ...rows.map((row) => row.map(cell).join('\t'))].join('\n');
+}
+
 /* --------------------------------------------------- arrow value conversion */
 
 /**

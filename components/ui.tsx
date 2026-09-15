@@ -468,6 +468,41 @@ export function Button({
   );
 }
 
+/**
+ * Put text on the clipboard, and report honestly whether it worked.
+ *
+ * The async Clipboard API is blocked outside a secure context and by some managed
+ * browser profiles. The old execCommand path still works in several of those, so it is
+ * worth trying before giving up — and when both fail the button says so rather than
+ * looking like it did nothing, which is indistinguishable from being broken.
+ */
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path.
+  }
+
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.top = '0';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function CopyButton({
   text,
   label = 'Copy',
@@ -477,29 +512,28 @@ export function CopyButton({
   label?: string;
   variant?: 'primary' | 'secondary' | 'ghost';
 }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const copy = useCallback(() => {
     if (!text) return;
-    navigator.clipboard.writeText(text).then(
-      () => {
-        setCopied(true);
-        clearTimeout(timer.current);
-        timer.current = setTimeout(() => setCopied(false), 1600);
-      },
-      () => {
-        // Clipboard denied (insecure context or permission). Leave the label alone
-        // rather than claiming a copy that did not happen.
-      },
-    );
+    void writeClipboard(text).then((ok) => {
+      setState(ok ? 'copied' : 'failed');
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setState('idle'), ok ? 1600 : 2600);
+    });
   }, [text]);
 
   return (
-    <Button onClick={copy} variant={variant} disabled={!text}>
-      {copied ? 'Copied' : label}
+    <Button
+      onClick={copy}
+      variant={variant}
+      disabled={!text}
+      title={state === 'failed' ? 'Your browser blocked clipboard access' : undefined}
+    >
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Press Ctrl+C' : label}
     </Button>
   );
 }
