@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder } from '@codemirror/view';
+import { Compartment, EditorState, StateEffect, StateField, type Extension } from '@codemirror/state';
+import {
+  Decoration,
+  EditorView,
+  keymap,
+  lineNumbers,
+  highlightActiveLine,
+  placeholder,
+  type DecorationSet,
+} from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { json } from '@codemirror/lang-json';
 import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
 import {
   acceptCompletion,
@@ -42,6 +51,48 @@ const CM_DIALECTS: Record<string, typeof StandardSQL> = {
   sqlite: SQLite,
 };
 
+/**
+ * Lines to mark, and how.
+ *
+ * The diff already knows which line each difference sits on; this paints it where the
+ * reader is looking rather than making them count rows in a table and then count lines
+ * in a box.
+ */
+export type HighlightTone = 'added' | 'removed' | 'changed';
+
+export interface HighlightedLine {
+  /** 1-based, matching what the gutter shows. */
+  line: number;
+  tone: HighlightTone;
+}
+
+const setHighlights = StateEffect.define<HighlightedLine[]>();
+
+const LINE_MARK: Record<HighlightTone, ReturnType<typeof Decoration.line>> = {
+  added: Decoration.line({ class: 'cm-diff-added' }),
+  removed: Decoration.line({ class: 'cm-diff-removed' }),
+  changed: Decoration.line({ class: 'cm-diff-changed' }),
+};
+
+const highlightField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(marks, transaction) {
+    for (const effect of transaction.effects) {
+      if (!effect.is(setHighlights)) continue;
+      const doc = transaction.state.doc;
+      const ranges = effect.value
+        // A line number past the end of the document would throw; a stale highlight
+        // arriving a frame before the new text is ordinary, not exceptional.
+        .filter((h) => h.line >= 1 && h.line <= doc.lines)
+        .map((h) => LINE_MARK[h.tone].range(doc.line(h.line).from))
+        .sort((a, b) => a.from - b.from);
+      return Decoration.set(ranges);
+    }
+    return transaction.docChanged ? marks.map(transaction.changes) : marks;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 const theme = EditorView.theme({
   '&': { fontSize: '13px', backgroundColor: 'transparent' },
   '.cm-content': { fontFamily: 'var(--font-mono)', padding: '10px 0' },
@@ -60,6 +111,11 @@ const theme = EditorView.theme({
     textDecoration: 'underline wavy oklch(0.58 0.22 25)',
     textDecorationSkipInk: 'none',
   },
+  // Tinted the whole line width rather than just the text, so a difference is findable
+  // by scrolling past it rather than by reading.
+  '.cm-line.cm-diff-added': { backgroundColor: 'oklch(0.72 0.15 155 / 0.18)' },
+  '.cm-line.cm-diff-removed': { backgroundColor: 'oklch(0.63 0.22 25 / 0.16)' },
+  '.cm-line.cm-diff-changed': { backgroundColor: 'oklch(0.75 0.15 75 / 0.22)' },
   '.cm-tooltip.cm-tooltip-autocomplete': {
     border: '1px solid var(--border-card)',
     borderRadius: '8px',
@@ -186,6 +242,8 @@ export function SqlEditor({
   defaultTable,
   complete = false,
   onRun,
+  language = 'sql',
+  highlights,
 }: {
   value: string;
   onChange?: (next: string) => void;
@@ -213,6 +271,10 @@ export function SqlEditor({
    * line has already been inserted.
    */
   onRun?: () => void;
+  /** JSON turns off the SQL grammar, which would colour a mapping at random. */
+  language?: 'sql' | 'json';
+  /** Lines to tint. Applied by dispatch, so changing them does not rebuild the editor. */
+  highlights?: HighlightedLine[];
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -235,7 +297,10 @@ export function SqlEditor({
       history(),
       highlightActiveLine(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      languageSlot.current.of(sqlSupport(dialectId, schema, defaultTable)),
+      languageSlot.current.of(
+        language === 'json' ? json() : sqlSupport(dialectId, schema, defaultTable),
+      ),
+      highlightField,
       EditorView.lineWrapping,
       theme,
       EditorView.editable.of(!readOnly),
@@ -311,18 +376,30 @@ export function SqlEditor({
     // `value` is intentionally excluded: it is the initial document only, and later
     // changes are applied by the effect below without tearing down the editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialectId, readOnly, placeholderText, lint]);
+  }, [dialectId, readOnly, placeholderText, lint, language]);
 
   // Swap in a new schema when tables are loaded or removed, in place.
   useEffect(() => {
     const instance = view.current;
     if (!instance) return;
     instance.dispatch({
-      effects: languageSlot.current.reconfigure(sqlSupport(dialectId, schema, defaultTable)),
+      effects: languageSlot.current.reconfigure(
+        language === 'json' ? json() : sqlSupport(dialectId, schema, defaultTable),
+      ),
     });
     // The schema object is rebuilt by the caller on every render; compare its contents.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialectId, schemaKey(schema), defaultTable]);
+  }, [dialectId, schemaKey(schema), defaultTable, language]);
+
+  // Paint the marked lines. A dispatch rather than a rebuild, so the cursor, the
+  // selection and the undo history all survive a diff being recomputed as you type.
+  useEffect(() => {
+    const instance = view.current;
+    if (!instance) return;
+    instance.dispatch({ effects: setHighlights.of(highlights ?? []) });
+    // Compared by content: the caller rebuilds the array on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(highlights ?? [])]);
 
   // Apply external value changes (formatting, presets, clearing) without disturbing
   // the cursor when the document already matches.

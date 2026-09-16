@@ -194,6 +194,17 @@ key-sorted encoding. And the cluster writes four settings of its own — `uuid`,
 same list as everything else but are labelled as the cluster's own and never counted, because four
 false differences on every check trains you to skim the list.
 
+Both boxes are editors with line gutters, and every difference is tinted on the line it occurs —
+green for added, red for removed, amber for a changed type or setting. The table names the line
+too, as `line 6` when both sides agree or `line 6 → 8` when the same field sits at different
+depths in the two documents. `JSON.parse` throws position away, so
+[`lib/json-lines.ts`](lib/json-lines.ts) scans the raw text for each key path and its line; SQL
+columns already carried a line from the DDL parser.
+
+Highlights are applied by dispatching a CodeMirror effect rather than rebuilding the editor, so
+recomputing the diff on every keystroke does not cost you the cursor, the selection or the undo
+history.
+
 Fields and settings share one result table rather than having one each. They answer the same
 question — did this index come out the way it was asked for — and splitting them made the reader
 check two places and decide which mattered. One toggle hides what is not a difference: fields that

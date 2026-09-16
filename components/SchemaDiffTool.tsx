@@ -15,7 +15,8 @@ import {
 } from '@/lib/es-mapping';
 import { sendFieldsHandoff } from '@/lib/handoff';
 import { usePersistentState } from '@/lib/settings';
-import { Button, DialectSelect, Note, Panel, PasteArea, Toggle } from '@/components/ui';
+import { SqlEditor, type HighlightedLine } from '@/components/SqlEditor';
+import { Button, DialectSelect, Note, Panel, Toggle } from '@/components/ui';
 
 const SQL_BEFORE = `CREATE EXTERNAL TABLE prod_db.customer_snapshot (
   customer_id string,
@@ -97,6 +98,9 @@ interface Row {
   before?: string;
   after?: string;
   attributes?: EsAttributeChange[];
+  /** Where this sits in each pasted document, when the parser could tell. */
+  beforeLine?: number;
+  afterLine?: number;
 }
 
 const STATUS_STYLE: Record<RowKind, string> = {
@@ -139,11 +143,19 @@ interface Side {
   columns: DdlColumn[];
   fields: EsField[];
   settings: Record<string, string>;
+  settingLines: Record<string, number>;
   index?: string;
   error?: string;
 }
 
-const EMPTY: Side = { state: 'idle', format: 'unknown', columns: [], fields: [], settings: {} };
+const EMPTY: Side = {
+  state: 'idle',
+  format: 'unknown',
+  columns: [],
+  fields: [],
+  settings: {},
+  settingLines: {},
+};
 
 /** Which parser a pasted document belongs to. Decided per side, not by a mode switch. */
 function detect(text: string): Format {
@@ -177,8 +189,16 @@ export function SchemaDiffTool() {
   }, [bothReady, mismatched, format, before, after]);
 
   const settingChanges = useMemo<EsSettingChange[]>(
-    () => (format === 'es' ? diffEsSettings(before.settings, after.settings) : []),
-    [format, before.settings, after.settings],
+    () =>
+      format === 'es'
+        ? diffEsSettings(
+            before.settings,
+            after.settings,
+            before.settingLines,
+            after.settingLines,
+          )
+        : [],
+    [format, before.settings, after.settings, before.settingLines, after.settingLines],
   );
 
   /** Fields and settings folded into one list, sorted so real differences lead. */
@@ -189,6 +209,8 @@ export function SchemaDiffTool() {
       kind: change.generated ? 'generated' : 'setting',
       before: change.before,
       after: change.after,
+      beforeLine: change.beforeLine,
+      afterLine: change.afterLine,
     }));
     return [...diff, ...settingRows].sort((a, b) => ROW_ORDER[a.kind] - ROW_ORDER[b.kind]);
   }, [diff, settingChanges]);
@@ -231,6 +253,29 @@ export function SchemaDiffTool() {
     router.push('/bulk-query-generator/');
   }
 
+  /**
+   * The lines to tint in each box.
+   *
+   * A removed field only exists on the left and an added one only on the right, so the
+   * two sides get different lists rather than one shared one — tinting a line that has
+   * nothing wrong with it is worse than tinting none.
+   */
+  const highlightsFor = (which: 'before' | 'after'): HighlightedLine[] => {
+    const marks: HighlightedLine[] = [];
+    for (const row of rows ?? []) {
+      if (row.kind === 'unchanged' || row.kind === 'generated') continue;
+      const line = which === 'before' ? row.beforeLine : row.afterLine;
+      if (line === undefined) continue;
+      const tone =
+        row.kind === 'added' ? 'added' : row.kind === 'removed' ? 'removed' : 'changed';
+      marks.push({ line, tone });
+    }
+    return marks;
+  };
+
+  const beforeHighlights = useMemo(() => highlightsFor('before'), [rows]);
+  const afterHighlights = useMemo(() => highlightsFor('after'), [rows]);
+
   const bothEs = format === 'es';
 
   return (
@@ -271,6 +316,7 @@ export function SchemaDiffTool() {
           side={before}
           onSqlExample={() => setBeforeText(SQL_BEFORE)}
           onEsExample={() => setBeforeText(ES_BEFORE)}
+          highlights={beforeHighlights}
         />
         <SchemaPane
           step={2}
@@ -281,6 +327,7 @@ export function SchemaDiffTool() {
           side={after}
           onSqlExample={() => setAfterText(SQL_AFTER)}
           onEsExample={() => setAfterText(ES_AFTER)}
+          highlights={afterHighlights}
         />
       </div>
 
@@ -361,7 +408,18 @@ export function SchemaDiffTool() {
                     key={`${row.kind}:${row.name}`}
                     className="border-b border-[var(--border-card)] align-top last:border-0"
                   >
-                    <td className="py-2 pr-4 font-mono font-medium">{row.name}</td>
+                    <td className="py-2 pr-4 font-mono font-medium">
+                      {row.name}
+                      {(row.beforeLine ?? row.afterLine) !== undefined && (
+                        <span className="ml-2 text-xs font-normal text-ink-400 dark:text-ink-500">
+                          {row.beforeLine !== undefined && row.afterLine !== undefined
+                            ? row.beforeLine === row.afterLine
+                              ? `line ${row.beforeLine}`
+                              : `line ${row.beforeLine} → ${row.afterLine}`
+                            : `line ${row.beforeLine ?? row.afterLine}`}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4">
                       <span
                         className={`rounded px-1.5 py-0.5 text-xs whitespace-nowrap ${STATUS_STYLE[row.kind]}`}
@@ -415,6 +473,7 @@ function useSide(text: string, dialectId: string, set: (side: Side) => void) {
               columns: [],
               fields: result.mapping.fields,
               settings: result.mapping.settings,
+              settingLines: result.mapping.settingLines,
               index: result.mapping.index,
             }
           : { ...EMPTY, state: 'error', format: 'es', error: result.error },
@@ -471,6 +530,7 @@ function SchemaPane({
   side,
   onSqlExample,
   onEsExample,
+  highlights,
 }: {
   step: number;
   title: string;
@@ -480,6 +540,7 @@ function SchemaPane({
   side: Side;
   onSqlExample: () => void;
   onEsExample: () => void;
+  highlights: HighlightedLine[];
 }) {
   return (
     <Panel
@@ -498,7 +559,15 @@ function SchemaPane({
         </>
       }
     >
-      <PasteArea value={value} onChange={onChange} rows={10} minHeight="26vh" />
+      <SqlEditor
+        value={value}
+        onChange={onChange}
+        dialectId="sql"
+        language={side.format === 'es' ? 'json' : 'sql'}
+        highlights={highlights}
+        placeholderText="Paste a CREATE TABLE statement or an index mapping"
+        minHeight="26vh"
+      />
 
       {side.state === 'ready' && (
         <p className="mt-2 text-xs text-ink-500 dark:text-ink-400">

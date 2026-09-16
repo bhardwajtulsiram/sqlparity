@@ -116,10 +116,18 @@ describe('schema diff', () => {
     const after = [col('a', 'varchar'), col('b', 'string'), col('d', 'boolean')];
     const changes = diffColumns(before, after);
 
-    expect(changes).toContainEqual({ name: 'a', kind: 'unchanged', before: 'varchar', after: 'varchar' });
-    expect(changes).toContainEqual({ name: 'b', kind: 'retyped', before: 'bigint', after: 'string' });
-    expect(changes).toContainEqual({ name: 'c', kind: 'removed', before: 'double' });
-    expect(changes).toContainEqual({ name: 'd', kind: 'added', after: 'boolean' });
+    expect(changes).toContainEqual(
+      expect.objectContaining({ name: 'a', kind: 'unchanged', before: 'varchar', after: 'varchar' }),
+    );
+    expect(changes).toContainEqual(
+      expect.objectContaining({ name: 'b', kind: 'retyped', before: 'bigint', after: 'string' }),
+    );
+    expect(changes).toContainEqual(
+      expect.objectContaining({ name: 'c', kind: 'removed', before: 'double' }),
+    );
+    expect(changes).toContainEqual(
+      expect.objectContaining({ name: 'd', kind: 'added', after: 'boolean' }),
+    );
   });
 
   it('matches column names case-insensitively', () => {
@@ -135,7 +143,7 @@ describe('schema diff', () => {
 
   it('handles an empty side', () => {
     expect(diffColumns([], [col('a', 'int')])).toEqual([
-      { name: 'a', kind: 'added', after: 'int' },
+      expect.objectContaining({ name: 'a', kind: 'added', after: 'int' }),
     ]);
   });
 });
@@ -152,5 +160,26 @@ describe('grammar fallback', () => {
   it('still parses ordinary DDL with the selected dialect', async () => {
     const result = await parseDdl(ANSI_DDL, 'postgresql');
     expect(result.columns.map((c) => c.name)).toEqual(['id', 'name', 'created_at', 'total']);
+  });
+});
+
+describe('line numbers on a SQL diff', () => {
+  it('reports which line each side declared the column on', async () => {
+    const before = await parseDdl(
+      'CREATE TABLE t (\n  a int,\n  b bigint\n);',
+      'trino',
+    );
+    const after = await parseDdl(
+      'CREATE TABLE t (\n  a int,\n  c double,\n  b string\n);',
+      'trino',
+    );
+    const changes = diffColumns(before.columns, after.columns);
+
+    expect(changes.find((c) => c.name === 'b')).toMatchObject({
+      kind: 'retyped',
+      beforeLine: 3,
+      afterLine: 4,
+    });
+    expect(changes.find((c) => c.name === 'c')).toMatchObject({ kind: 'added', afterLine: 3 });
   });
 });

@@ -91,7 +91,9 @@ describe('parsing', () => {
 
   it('accepts a bare properties block', () => {
     const result = parseEsMapping('{"properties":{"a":{"type":"keyword"}}}');
-    expect(result.mapping?.fields).toEqual([{ name: 'a', type: 'keyword', attributes: {} }]);
+    expect(result.mapping?.fields).toEqual([
+      { name: 'a', type: 'keyword', attributes: {}, line: 1 },
+    ]);
   });
 
   it('keeps type apart from the rest of the definition', () => {
@@ -234,5 +236,76 @@ describe('stable comparison of values', () => {
 
   it('keeps array order, which does carry meaning', () => {
     expect(stableJson(['a', 'b'])).not.toBe(stableJson(['b', 'a']));
+  });
+});
+
+describe('line numbers', () => {
+  const SENT_LINES = `{
+  "mappings": {
+    "properties": {
+      "customer_id": { "type": "keyword" },
+      "address": {
+        "properties": {
+          "city": { "type": "text" }
+        }
+      }
+    }
+  },
+  "settings": { "index": { "number_of_shards": "4" } }
+}`;
+
+  const GOT_LINES = `{
+  "orders_index": {
+    "mappings": {
+      "properties": {
+        "customer_id": { "type": "long" },
+        "address": {
+          "properties": {
+            "city": { "type": "text" }
+          }
+        }
+      }
+    },
+    "settings": { "index": { "number_of_shards": "8" } }
+  }
+}`;
+
+  it('records the line each field was declared on', () => {
+    const mapping = parseEsMapping(SENT_LINES).mapping!;
+    expect(mapping.fields.map((f) => `${f.name}@${f.line}`)).toEqual([
+      'customer_id@4',
+      'address@5',
+      'address.city@7',
+    ]);
+  });
+
+  it('records lines through the index wrapper too', () => {
+    const mapping = parseEsMapping(GOT_LINES).mapping!;
+    expect(mapping.fields.map((f) => `${f.name}@${f.line}`)).toEqual([
+      'customer_id@5',
+      'address@6',
+      'address.city@8',
+    ]);
+  });
+
+  it('records setting lines in both shapes', () => {
+    // The unwrapped document has settings at the root; the wrapped one under the
+    // index name. Both must resolve.
+    expect(parseEsMapping(SENT_LINES).mapping!.settingLines['index.number_of_shards']).toBe(12);
+    expect(parseEsMapping(GOT_LINES).mapping!.settingLines['index.number_of_shards']).toBe(13);
+  });
+
+  it('carries both lines onto a difference', () => {
+    const a = parseEsMapping(SENT_LINES).mapping!;
+    const b = parseEsMapping(GOT_LINES).mapping!;
+    const change = diffEsFields(a.fields, b.fields).find((c) => c.name === 'customer_id');
+    expect(change).toMatchObject({ kind: 'retyped', beforeLine: 4, afterLine: 5 });
+  });
+
+  it('carries lines onto a setting difference', () => {
+    const a = parseEsMapping(SENT_LINES).mapping!;
+    const b = parseEsMapping(GOT_LINES).mapping!;
+    const [change] = diffEsSettings(a.settings, b.settings, a.settingLines, b.settingLines);
+    expect(change).toMatchObject({ beforeLine: 12, afterLine: 13 });
   });
 });

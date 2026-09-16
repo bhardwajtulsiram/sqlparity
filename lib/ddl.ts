@@ -171,6 +171,9 @@ export interface DdlChange {
   kind: DdlChangeKind;
   before?: string;
   after?: string;
+  /** Line each side declared the column on, for pointing at it. */
+  beforeLine?: number;
+  afterLine?: number;
 }
 
 /**
@@ -185,7 +188,12 @@ export function diffColumns(before: DdlColumn[], after: DdlColumn[]): DdlChange[
   for (const column of before) {
     const match = afterMap.get(column.name.toLowerCase());
     if (!match) {
-      changes.push({ name: column.name, kind: 'removed', before: column.type });
+      changes.push({
+        name: column.name,
+        kind: 'removed',
+        before: column.type,
+        beforeLine: column.line,
+      });
       continue;
     }
     const same = match.type.trim().toLowerCase() === column.type.trim().toLowerCase();
@@ -194,12 +202,19 @@ export function diffColumns(before: DdlColumn[], after: DdlColumn[]): DdlChange[
       kind: same ? 'unchanged' : 'retyped',
       before: column.type,
       after: match.type,
+      beforeLine: column.line,
+      afterLine: match.line,
     });
   }
 
   for (const column of after) {
     if (!beforeMap.has(column.name.toLowerCase())) {
-      changes.push({ name: column.name, kind: 'added', after: column.type });
+      changes.push({
+        name: column.name,
+        kind: 'added',
+        after: column.type,
+        afterLine: column.line,
+      });
     }
   }
 

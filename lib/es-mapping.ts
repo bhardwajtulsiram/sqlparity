@@ -14,6 +14,8 @@
  * either as a change would bury the real ones.
  */
 
+import { keyLines } from './json-lines';
+
 export interface EsField {
   /** Dotted path, so a nested field reads `address.city`. */
   name: string;
@@ -21,6 +23,8 @@ export interface EsField {
   type: string;
   /** Everything else on the field — normalizer, index, doc_values, format, and so on. */
   attributes: Record<string, unknown>;
+  /** 1-based line in the pasted document, so a difference can point at it. */
+  line?: number;
 }
 
 export interface EsMapping {
@@ -29,6 +33,8 @@ export interface EsMapping {
   fields: EsField[];
   /** Settings flattened to dotted keys, so `index.number_of_shards`. */
   settings: Record<string, string>;
+  /** Line of each setting in the pasted document, keyed the same way. */
+  settingLines: Record<string, number>;
 }
 
 export interface EsParseResult {
@@ -92,11 +98,15 @@ function collectFields(
   properties: Record<string, unknown>,
   prefix: string,
   into: EsField[],
+  /** Where this block sits in the raw document, for looking the line up. */
+  jsonPath: string,
+  lines: Map<string, number>,
 ): void {
   for (const [name, raw] of Object.entries(properties)) {
     if (raw === null || typeof raw !== 'object') continue;
     const definition = raw as Record<string, unknown>;
     const path = prefix ? `${prefix}.${name}` : name;
+    const here = jsonPath ? `${jsonPath}.${name}` : name;
 
     const nested = definition.properties as Record<string, unknown> | undefined;
     const multi = definition.fields as Record<string, unknown> | undefined;
@@ -112,10 +122,11 @@ function collectFields(
       // A block with children and no declared type is an object mapping.
       type: typeof definition.type === 'string' ? definition.type : nested ? 'object' : 'unknown',
       attributes,
+      line: lines.get(here),
     });
 
-    if (nested) collectFields(nested, path, into);
-    if (multi) collectFields(multi, path, into);
+    if (nested) collectFields(nested, path, into, `${here}.properties`, lines);
+    if (multi) collectFields(multi, path, into, `${here}.fields`, lines);
   }
 }
 
@@ -135,6 +146,8 @@ export function parseEsMapping(text: string): EsParseResult {
 
   let body = document as Record<string, unknown>;
   let index: string | undefined;
+  /** Prefix of the raw document we have descended through, for the line lookup. */
+  let jsonPrefix = '';
 
   // The GET-index response wraps everything in the index name.
   if (!('mappings' in body) && !('properties' in body) && !('settings' in body)) {
@@ -148,6 +161,7 @@ export function parseEsMapping(text: string): EsParseResult {
       };
     }
     index = names[0];
+    jsonPrefix = index;
     const inner = body[index];
     if (inner === null || typeof inner !== 'object') {
       return { error: `"${index}" does not hold an index definition.` };
@@ -155,25 +169,40 @@ export function parseEsMapping(text: string): EsParseResult {
     body = inner as Record<string, unknown>;
   }
 
+  const hasMappings = body.mappings !== undefined;
   const mappings = (body.mappings ?? body) as Record<string, unknown>;
+  if (hasMappings) jsonPrefix = jsonPrefix ? `${jsonPrefix}.mappings` : 'mappings';
   const properties = (mappings.properties ?? {}) as Record<string, unknown>;
   if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
     return { error: 'Found no "properties" block, so there are no fields to compare.' };
   }
 
+  const lines = keyLines(trimmed);
   const fields: EsField[] = [];
-  collectFields(properties, '', fields);
+  collectFields(
+    properties,
+    '',
+    fields,
+    jsonPrefix ? `${jsonPrefix}.properties` : 'properties',
+    lines,
+  );
   if (fields.length === 0) {
     return { error: 'The "properties" block is empty, so there are no fields to compare.' };
   }
 
-  return {
-    mapping: {
-      index,
-      fields,
-      settings: flattenSettings(body.settings ?? {}),
-    },
-  };
+  const settings = flattenSettings(body.settings ?? {});
+  // The settings block is a sibling of mappings, not a child of it.
+  // Optional dot: the bare shape gives a prefix of exactly 'mappings', the wrapped
+  // one 'index_name.mappings'. Both need it gone.
+  const settingsPrefix = jsonPrefix.replace(/\.?mappings$/, '');
+  const settingLines: Record<string, number> = {};
+  for (const key of Object.keys(settings)) {
+    const full = settingsPrefix ? `${settingsPrefix}.settings.${key}` : `settings.${key}`;
+    const line = lines.get(full);
+    if (line !== undefined) settingLines[key] = line;
+  }
+
+  return { mapping: { index, fields, settings, settingLines } };
 }
 
 /* -------------------------------------------------------------------- diff */
@@ -194,6 +223,9 @@ export interface EsFieldChange {
   after?: string;
   /** Set when the type matches but the field is configured differently. */
   attributes?: EsAttributeChange[];
+  /** Line in each pasted document, so the difference can be pointed at. */
+  beforeLine?: number;
+  afterLine?: number;
 }
 
 /** Which attributes differ between two field definitions, ignoring key order. */
@@ -228,7 +260,12 @@ export function diffEsFields(before: EsField[], after: EsField[]): EsFieldChange
   for (const field of before) {
     const match = afterMap.get(field.name);
     if (!match) {
-      changes.push({ name: field.name, kind: 'removed', before: field.type });
+      changes.push({
+        name: field.name,
+        kind: 'removed',
+        before: field.type,
+        beforeLine: field.line,
+      });
       continue;
     }
     if (match.type !== field.type) {
@@ -237,6 +274,8 @@ export function diffEsFields(before: EsField[], after: EsField[]): EsFieldChange
         kind: 'retyped',
         before: field.type,
         after: match.type,
+        beforeLine: field.line,
+        afterLine: match.line,
       });
       continue;
     }
@@ -246,13 +285,20 @@ export function diffEsFields(before: EsField[], after: EsField[]): EsFieldChange
       kind: attributes.length > 0 ? 'attributes' : 'unchanged',
       before: field.type,
       after: match.type,
+      beforeLine: field.line,
+      afterLine: match.line,
       ...(attributes.length > 0 ? { attributes } : {}),
     });
   }
 
   for (const field of after) {
     if (!beforeMap.has(field.name)) {
-      changes.push({ name: field.name, kind: 'added', after: field.type });
+      changes.push({
+        name: field.name,
+        kind: 'added',
+        after: field.type,
+        afterLine: field.line,
+      });
     }
   }
 
@@ -263,6 +309,8 @@ export interface EsSettingChange {
   key: string;
   before?: string;
   after?: string;
+  beforeLine?: number;
+  afterLine?: number;
   /** True for the keys Elasticsearch writes itself, which are shown but never counted. */
   generated: boolean;
 }
@@ -271,6 +319,8 @@ export interface EsSettingChange {
 export function diffEsSettings(
   before: Record<string, string>,
   after: Record<string, string>,
+  beforeLines: Record<string, number> = {},
+  afterLines: Record<string, number> = {},
 ): EsSettingChange[] {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
   const changes: EsSettingChange[] = [];
@@ -283,6 +333,8 @@ export function diffEsSettings(
       key,
       before: a,
       after: b,
+      beforeLine: beforeLines[key],
+      afterLine: afterLines[key],
       // Prefix match so index.version.created and anything else under it is covered.
       generated: GENERATED_SETTINGS.some((g) => key === g || key.startsWith(`${g}.`)),
     });
