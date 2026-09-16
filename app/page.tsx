@@ -44,6 +44,23 @@ function Line({ color = 'var(--syn-plain)', children }: { color?: string; childr
   );
 }
 
+/** A row of the little result grid in the scratchpad tile. */
+function ResultRow({ cells, head = false }: { cells: string[]; head?: boolean }) {
+  return (
+    <div className="flex gap-6 font-mono">
+      {cells.map((cell, i) => (
+        <span
+          key={cell}
+          className={i === 0 ? 'w-24 shrink-0' : 'w-24 shrink-0 text-right'}
+          style={{ color: head ? 'var(--syn-comment)' : 'var(--syn-plain)' }}
+        >
+          {cell}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const TOOLS = [
   {
     href: '/scratchpad/',
@@ -51,7 +68,23 @@ const TOOLS = [
     line: 'Drop in a CSV or Parquet file and query it with real SQL. DuckDB runs inside the tab, so the file is never uploaded.',
     caption: 'orders.csv — read off your disk, not uploaded',
     wide: true,
-    preview: <Sql code={SCRATCHPAD_QUERY} className="text-[12.5px] leading-relaxed" />,
+    // The flagship tile is twice as wide as the rest, so a query alone left it half
+    // empty. Showing the rows it returns fills the space with the thing the tool is
+    // for — a query and its answer — rather than with padding.
+    preview: (
+      <div className="text-[12.5px] leading-relaxed">
+        <Sql code={SCRATCHPAD_QUERY} className="text-[12.5px] leading-relaxed" />
+        <div
+          className="mt-3 border-t pt-2.5"
+          style={{ borderColor: 'var(--code-border)' }}
+        >
+          <ResultRow cells={['segment', 'rows', 'avg_total']} head />
+          <ResultRow cells={['enterprise', '1,284', '48,210.55']} />
+          <ResultRow cells={['smb', '9,617', '3,905.20']} />
+          <ResultRow cells={['unknown', '412', '1,120.00']} />
+        </div>
+      </div>
+    ),
   },
   {
     href: '/bulk-query-generator/',
@@ -69,6 +102,7 @@ const TOOLS = [
       <div className="text-[12.5px] leading-relaxed">
         <Line color="var(--syn-string)">+ signup_channel varchar</Line>
         <Line color="var(--syn-number)">~ total_spend int → bigint</Line>
+        <Line color="var(--syn-operator)">− legacy_ref varchar</Line>
         <Line color="var(--syn-comment)">= customer_id varchar</Line>
       </div>
     ),
@@ -77,8 +111,13 @@ const TOOLS = [
     href: '/in-list-builder/',
     name: 'IN list builder',
     line: 'A column of values becomes a correctly quoted clause — apostrophes, backslashes and leading zeros included.',
-    caption: "O'Brien Holdings · 007",
-    preview: <Sql code={"IN ('O''Brien Holdings', '007')"} className="text-[12.5px]" />,
+    caption: "O'Brien Holdings · 007 · Müller GmbH",
+    preview: (
+      <Sql
+        code={"IN (\n  'O''Brien Holdings',\n  '007',\n  'Müller GmbH'\n)"}
+        className="text-[12.5px] leading-relaxed"
+      />
+    ),
   },
   {
     href: '/sql-formatter/',
@@ -129,18 +168,55 @@ export default function Home() {
   return (
     <div className="space-y-20 pb-10">
       <section className="pt-2 lg:pt-4">
+        {/* The grid leads because it is the part that says what the product does. The
+            claim still gets the h1 — a page whose first heading names its tools but not
+            its point orients nobody who arrived from a search. */}
+        <h1 className="text-3xl leading-[1.1] font-semibold tracking-tight text-balance sm:text-4xl">
+          Seven SQL tools that never see your data
+        </h1>
+        <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-600 dark:text-ink-300">
+          Built around one job: proving a migration copied every column correctly, without handing
+          your table definitions to anyone. Everything runs in this tab.
+        </p>
+
+        <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {TOOLS.map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className={`group flex min-w-0 flex-col rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)] transition-colors hover:border-accent-500 ${
+                tool.wide ? 'sm:col-span-2' : ''
+              }`}
+            >
+              <h3 className="text-[15px] font-semibold group-hover:text-accent-700 dark:group-hover:text-accent-400">
+                {tool.name}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-600 dark:text-ink-400">
+                {tool.line}
+              </p>
+
+              <div className="mt-5">
+                <p className="mb-2 truncate font-mono text-[11.5px] text-ink-500 dark:text-ink-400">
+                  {tool.caption}
+                </p>
+                <CodeSurface>
+                  <div className="overflow-x-auto p-3.5">{tool.preview}</div>
+                </CodeSurface>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section>
         <div className="grid gap-10 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:items-center lg:gap-12">
           <div>
-            <h1 className="text-4xl leading-[1.05] font-semibold tracking-tight text-balance sm:text-5xl">
+            <h2 className="text-3xl leading-[1.08] font-semibold tracking-tight text-balance sm:text-4xl">
               Your schema never leaves this tab.
-            </h1>
-            <p className="mt-5 text-lg leading-relaxed text-ink-600 dark:text-ink-300">
-              Seven tools for the work around a migration — querying a file, generating the
-              checks, diffing the definitions, escaping the values, formatting, reviewing and
-              converting. Every one of them computes right here.
-            </p>
-            <p className="mt-3 text-lg leading-relaxed text-ink-600 dark:text-ink-300">
-              No account. No upload. No server to trust.
+            </h2>
+            <p className="mt-4 text-lg leading-relaxed text-ink-600 dark:text-ink-300">
+              No account. No upload. No server to trust. Type in the box and watch the counter
+              below it stay at zero — the claim is measured, not asserted.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -160,42 +236,6 @@ export default function Home() {
           </div>
 
           <HeroDemo />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-2xl font-semibold tracking-tight">Seven tools, one workflow</h2>
-        <p className="mt-2 max-w-2xl text-ink-600 dark:text-ink-400">
-          Built around one job: proving a migration copied every column correctly, without handing
-          your table definitions to anyone.
-        </p>
-
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {TOOLS.map((tool) => (
-            <Link
-              key={tool.href}
-              href={tool.href}
-              className={`group flex min-w-0 flex-col rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-card)] transition-colors hover:border-accent-500 ${
-                tool.wide ? 'sm:col-span-2' : ''
-              }`}
-            >
-              <h3 className="text-[15px] font-semibold group-hover:text-accent-700 dark:group-hover:text-accent-400">
-                {tool.name}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-600 dark:text-ink-400">
-                {tool.line}
-              </p>
-
-              <div className="mt-5 sm:mt-auto sm:pt-5">
-                <p className="mb-2 truncate font-mono text-[11.5px] text-ink-500 dark:text-ink-400">
-                  {tool.caption}
-                </p>
-                <CodeSurface>
-                  <div className="overflow-x-auto p-3.5">{tool.preview}</div>
-                </CodeSurface>
-              </div>
-            </Link>
-          ))}
         </div>
       </section>
 
