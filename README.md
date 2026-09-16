@@ -14,7 +14,7 @@ be hosted anywhere.
 | `/scratchpad` | Drop in a CSV or Parquet file and query it with real SQL, via DuckDB compiled to WebAssembly |
 | `/in-list-builder` | Paste a column of values, get a properly quoted and escaped `IN (…)` clause |
 | `/bulk-query-generator` | One template plus a list of fields, one query per field |
-| `/schema-diff` | Compare two `CREATE TABLE` statements, generate checks for what changed |
+| `/schema-diff` | Compare two `CREATE TABLE` statements or two Elasticsearch index mappings |
 | `/sql-formatter` | Format SQL for 16 dialects |
 | `/query-optimizer` | Review a query for the patterns that make it scan more than it needs to |
 | `/sql-converter` | Translate quoting, escaping, row limits and function names between dialects |
@@ -176,6 +176,33 @@ Two details that are easy to get wrong:
 
 [`public/_headers`](public/_headers) carries the same policy for hosts that read it, plus
 `frame-ancestors` and the other headers a meta tag cannot express.
+
+### Comparing Elasticsearch index mappings
+
+`/schema-diff` takes index mappings as well as SQL, deciding per side from what was pasted rather
+than from a mode switch. The job is checking that an index was created the way it was asked for,
+and the two documents involved are never textually equal even when the answer is yes:
+
+    what you send   { "mappings": { "properties": { … } }, "settings": { … } }
+    what you get    { "my_index": { "aliases": {}, "mappings": { … }, "settings": { … } } }
+
+Three things would otherwise be reported as differences when they are not. The response wraps
+everything in the index name, so that is unwrapped and the name kept. Elasticsearch does not
+preserve key order inside a field definition, so attributes are compared by value through a
+key-sorted encoding. And the cluster writes four settings of its own — `uuid`, `creation_date`,
+`provided_name`, `version.created` — which cannot appear in the mapping you sent; they are shown
+behind a toggle and never counted, because four false differences on every check trains you to
+skim the list.
+
+Beyond added, removed and retyped, a field can come back **reconfigured**: the right type with
+different settings. A `keyword` that lost its normalizer is the case worth having — it passes a
+type-only comparison and behaves differently at query time. Nested objects flatten to dotted
+paths, keeping the parent so an `object` that became a string is still visible, and multi-fields
+appear under the name you would query them by.
+
+Mixing the two formats is refused rather than guessed. Comparing `keyword` against `varchar` means
+deciding they are equivalent, which is a judgement about the data rather than a fact about the
+schemas — the same refusal the dialect converter makes.
 
 ### Reviewing and converting without a model
 
