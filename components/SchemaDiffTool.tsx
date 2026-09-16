@@ -486,6 +486,20 @@ function useSide(text: string, dialectId: string, set: (side: Side) => void) {
       parseDdl(text, dialectId)
         .then((r) => {
           if (cancelled) return;
+          // No columns is a failure, not an empty success. The grammar reports the
+          // reason; showing "0 columns" and nothing else leaves the reader guessing
+          // whether the tool broke or their statement did.
+          if (r.columns.length === 0) {
+            set({
+              ...EMPTY,
+              state: 'error',
+              format: 'sql',
+              error: r.errors[0]
+                ? `Could not read that as a CREATE TABLE — ${r.errors[0].message} (line ${r.errors[0].line}).`
+                : 'Found no columns in that. Expected a CREATE TABLE statement.',
+            });
+            return;
+          }
           set({ ...EMPTY, state: 'ready', format: 'sql', columns: r.columns });
         })
         .catch(() => {

@@ -170,6 +170,10 @@ Two details that are easy to get wrong:
 
 - It must be `<meta http-equiv>`. Next's `metadata.other` emits `name=`, which browsers ignore
   for this header — a policy that looks present while enforcing nothing.
+- `'unsafe-eval'` is added in development only, and never ships: React needs it for
+  debugging features such as reconstructing a component stack, and never uses it in production.
+  Relaxing that one directive locally keeps the rest of the policy — `connect-src 'self'` above
+  all — enforced on the dev server, so the claim can be tested without a build.
 - `'wasm-unsafe-eval'` is required for DuckDB and permits WASM compilation only, not JavaScript
   `eval`. `'unsafe-inline'` for scripts is needed because a static export has no server to mint a
   nonce; it costs less here than usual, since nothing in this app renders user input as markup.

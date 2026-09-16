@@ -55,9 +55,18 @@ const mono = IBM_Plex_Mono({
  * public/_headers carries the same policy for hosts that read it, plus the directives
  * a meta tag cannot express.
  */
+/**
+ * React needs eval() in development for its debugging features — reconstructing a
+ * component stack from another environment, mainly — and never in production. Relaxing
+ * only this one directive, only in development, keeps the rest of the policy in force
+ * locally: connect-src 'self' is the line that enforces the product's claim, and it is
+ * worth being able to test that on the dev server rather than only after a build.
+ */
+const DEV_EVAL = process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'";
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'",
+  `script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'${DEV_EVAL}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",

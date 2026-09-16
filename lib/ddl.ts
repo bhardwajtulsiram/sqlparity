@@ -112,16 +112,39 @@ function isTableCreation(entity: TableEntity): boolean {
  * the declared type lives on `_colType.text`. Constraint clauses such as
  * `PRIMARY KEY (id)` are not reported as columns, which is what we want.
  */
+/**
+ * Run a parser call without its console noise.
+ *
+ * dt-sql-parser only replaces ANTLR default console listener when you hand it one of
+ * your own, and getAllEntities takes no parameter for that — so a grammar that cannot
+ * read the statement writes every syntax error straight to console.error. Those errors
+ * are expected here: parseDdl deliberately tries the selected dialect first and falls
+ * back to Hive, so the first attempt failing is the design working, not a fault worth
+ * reporting. validate() already collects the real ones.
+ *
+ * The call it wraps is synchronous, so nothing else can log into the gap.
+ */
+function withoutConsoleNoise<T>(run: () => T): T {
+  const original = console.error;
+  console.error = () => {};
+  try {
+    return run();
+  } finally {
+    console.error = original;
+  }
+}
+
 async function parseWith(key: ParserKey, sql: string): Promise<DdlParseResult> {
   const parser = await loadParser(key);
 
-  const errors: DdlError[] = (parser.validate(sql) ?? []).map((e) => ({
+  const errors: DdlError[] = (withoutConsoleNoise(() => parser.validate(sql)) ?? []).map((e) => ({
     line: e.startLine,
     column: e.startColumn,
     message: e.message,
   }));
 
-  const entities = (parser.getAllEntities(sql) ?? []) as unknown as TableEntity[];
+  const entities = (withoutConsoleNoise(() => parser.getAllEntities(sql)) ??
+    []) as unknown as TableEntity[];
   const columns: DdlColumn[] = [];
   let table: string | undefined;
 
