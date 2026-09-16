@@ -190,14 +190,25 @@ export function SchemaDiffTool() {
           <h1 className="text-xl font-semibold tracking-tight">Schema diff</h1>
           <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
             Paste two <code className="font-mono">CREATE TABLE</code> statements, or two
-            Elasticsearch index mappings, and see what differs.
+            Elasticsearch index mappings. There is no format to pick — each side is read as
+            whatever you paste into it.
           </p>
         </div>
-        {!bothEs && (
-          <div className="w-56">
-            <DialectSelect value={dialectId} onChange={setDialectId} label="Read DDL as" />
-          </div>
-        )}
+        <div className="w-56">
+          {/* Greyed rather than removed when both sides are mappings. A control that
+              vanishes reads as a bug; one that is visibly inapplicable explains itself. */}
+          <DialectSelect
+            value={dialectId}
+            onChange={setDialectId}
+            label="SQL dialect"
+            disabled={bothEs}
+            title={
+              bothEs
+                ? 'Both sides are Elasticsearch mappings, which are JSON — there is no SQL grammar to choose.'
+                : 'Which grammar to read the CREATE TABLE statements with.'
+            }
+          />
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -399,6 +410,28 @@ function useSide(text: string, dialectId: string, set: (side: Side) => void) {
   }, [text, dialectId, set]);
 }
 
+/**
+ * What this side was read as.
+ *
+ * The format is detected rather than chosen, which is less friction but invisible —
+ * someone looking for a format selector needs to see the answer somewhere, or they
+ * conclude the tool cannot do it.
+ */
+function FormatBadge({ side }: { side: Side }) {
+  if (side.state === 'idle') return null;
+
+  const [label, style] =
+    side.format === 'es'
+      ? ['Elasticsearch mapping', 'bg-accent-500/15 text-accent-700 dark:text-accent-400']
+      : side.format === 'sql'
+        ? ['SQL DDL', 'bg-accent-500/15 text-accent-700 dark:text-accent-400']
+        : ['Not recognised', 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'];
+
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-xs whitespace-nowrap ${style}`}>{label}</span>
+  );
+}
+
 function SchemaPane({
   step,
   title,
@@ -425,6 +458,7 @@ function SchemaPane({
       description={description}
       actions={
         <>
+          <FormatBadge side={side} />
           <Button variant="ghost" onClick={onSqlExample}>
             SQL example
           </Button>

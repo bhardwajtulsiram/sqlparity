@@ -220,13 +220,23 @@ export function Select({
   value,
   onChange,
   children,
+  disabled,
+  title,
 }: {
   value: string;
   onChange: (next: string) => void;
   children: React.ReactNode;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
-    <select className={CONTROL} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className={`${CONTROL} disabled:cursor-not-allowed disabled:opacity-50`}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      title={title}
+    >
       {children}
     </select>
   );
@@ -236,14 +246,19 @@ export function DialectSelect({
   value,
   onChange,
   label = 'SQL dialect',
+  disabled,
+  title,
 }: {
   value: string;
   onChange: (next: string) => void;
   label?: string;
+  /** Greyed rather than hidden, so it is clear the control exists but does not apply. */
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <Field label={label}>
-      <Select value={value} onChange={onChange}>
+      <Select value={value} onChange={onChange} disabled={disabled} title={title}>
         {DIALECTS.map((d) => (
           <option key={d.id} value={d.id}>
             {d.label}
