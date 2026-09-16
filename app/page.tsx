@@ -149,20 +149,6 @@ const TOOLS = [
   },
 ];
 
-const CHECKS = [
-  {
-    title: 'Open devtools, then type',
-    body: 'Watch the Network tab while you paste a schema into any tool here. Nothing appears, because nothing is sent.',
-  },
-  {
-    title: 'Turn off your network',
-    body: 'Every tool keeps working. There is no request to fail, and the fonts are served from this same origin.',
-  },
-  {
-    title: 'Clear this browser’s storage',
-    body: 'Your settings and saved templates live in this browser and nowhere else. Clearing them is all it takes for the tool to forget everything you typed.',
-  },
-];
 
 export default function Home() {
   return (
@@ -290,37 +276,6 @@ export default function Home() {
         <p className="mt-3 font-mono text-[11.5px] text-ink-500 dark:text-ink-400">
           identifier quoting · how an apostrophe is escaped · whether a backslash must be doubled
         </p>
-      </section>
-
-      <section className="rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] p-8 shadow-[var(--shadow-card)]">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:gap-12">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">
-              The privacy claim is checkable, not a promise
-            </h2>
-            <p className="mt-4 text-ink-600 dark:text-ink-400">
-              Every tool here is plain JavaScript running in your browser. Column names, table
-              definitions and identifiers are read, transformed and displayed without a network
-              request. You do not have to take that on faith — three ways to check it yourself:
-            </p>
-          </div>
-
-          <ol className="grid gap-px overflow-hidden rounded-lg border border-[var(--border-card)] bg-[var(--border-card)]">
-            {CHECKS.map((check, i) => (
-              <li key={check.title} className="flex gap-4 bg-[var(--surface-card)] p-5">
-                <span className="mt-0.5 font-mono text-sm text-ink-400 tabular-nums dark:text-ink-500">
-                  {i + 1}
-                </span>
-                <div>
-                  <h3 className="text-[15px] font-semibold">{check.title}</h3>
-                  <p className="mt-1 text-sm leading-relaxed text-ink-600 dark:text-ink-400">
-                    {check.body}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
       </section>
     </div>
   );
