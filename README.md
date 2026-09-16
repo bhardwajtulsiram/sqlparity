@@ -190,9 +190,14 @@ Three things would otherwise be reported as differences when they are not. The r
 everything in the index name, so that is unwrapped and the name kept. Elasticsearch does not
 preserve key order inside a field definition, so attributes are compared by value through a
 key-sorted encoding. And the cluster writes four settings of its own — `uuid`, `creation_date`,
-`provided_name`, `version.created` — which cannot appear in the mapping you sent; they are shown
-behind a toggle and never counted, because four false differences on every check trains you to
-skim the list.
+`provided_name`, `version.created` — which cannot appear in the mapping you sent; they sit in the
+same list as everything else but are labelled as the cluster's own and never counted, because four
+false differences on every check trains you to skim the list.
+
+Fields and settings share one result table rather than having one each. They answer the same
+question — did this index come out the way it was asked for — and splitting them made the reader
+check two places and decide which mattered. One toggle hides what is not a difference: fields that
+match, and the settings the cluster wrote itself.
 
 Beyond added, removed and retyped, a field can come back **reconfigured**: the right type with
 different settings. A `keyword` that lost its normalizer is the case worth having — it passes a

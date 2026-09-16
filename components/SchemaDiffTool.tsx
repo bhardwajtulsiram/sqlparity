@@ -81,20 +81,53 @@ interface Change {
   attributes?: EsAttributeChange[];
 }
 
-const STATUS_STYLE: Record<ChangeKind, string> = {
+/**
+ * Everything that differs, in one list.
+ *
+ * Fields and index settings answer the same question — did this index come out the way
+ * it was asked for — so splitting them across two tables made the reader check two
+ * places and decide which mattered. `setting` and `generated` are the two row kinds a
+ * field cannot be.
+ */
+type RowKind = ChangeKind | 'setting' | 'generated';
+
+interface Row {
+  name: string;
+  kind: RowKind;
+  before?: string;
+  after?: string;
+  attributes?: EsAttributeChange[];
+}
+
+const STATUS_STYLE: Record<RowKind, string> = {
   added: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
   removed: 'bg-red-50 text-red-900 dark:bg-red-950/30 dark:text-red-300',
   retyped: 'bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
   attributes: 'bg-accent-500/15 text-accent-700 dark:text-accent-400',
+  setting: 'bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
+  generated: 'text-ink-500 dark:text-ink-400',
   unchanged: 'text-ink-500 dark:text-ink-400',
 };
 
-const STATUS_LABEL: Record<ChangeKind, string> = {
+const STATUS_LABEL: Record<RowKind, string> = {
   added: 'Added',
   removed: 'Removed',
   retyped: 'Type changed',
   attributes: 'Settings changed',
+  setting: 'Setting changed',
+  generated: 'Written by the cluster',
   unchanged: 'Unchanged',
+};
+
+/** Real differences first; the two kinds that are not differences sort to the bottom. */
+const ROW_ORDER: Record<RowKind, number> = {
+  removed: 0,
+  retyped: 1,
+  attributes: 2,
+  added: 3,
+  setting: 4,
+  unchanged: 5,
+  generated: 6,
 };
 
 type Format = 'sql' | 'es' | 'unknown';
@@ -126,7 +159,6 @@ export function SchemaDiffTool() {
   const [beforeText, setBeforeText] = useState(SQL_BEFORE);
   const [afterText, setAfterText] = useState(SQL_AFTER);
   const [showUnchanged, setShowUnchanged] = useState(false);
-  const [showGenerated, setShowGenerated] = useState(false);
 
   const [before, setBefore] = useState<Side>(EMPTY);
   const [after, setAfter] = useState<Side>(EMPTY);
@@ -149,25 +181,43 @@ export function SchemaDiffTool() {
     [format, before.settings, after.settings],
   );
 
-  const realSettingChanges = settingChanges.filter((s) => !s.generated);
-  const generatedSettings = settingChanges.filter((s) => s.generated);
+  /** Fields and settings folded into one list, sorted so real differences lead. */
+  const rows = useMemo<Row[] | null>(() => {
+    if (!diff) return null;
+    const settingRows: Row[] = settingChanges.map((change) => ({
+      name: change.key,
+      kind: change.generated ? 'generated' : 'setting',
+      before: change.before,
+      after: change.after,
+    }));
+    return [...diff, ...settingRows].sort((a, b) => ROW_ORDER[a.kind] - ROW_ORDER[b.kind]);
+  }, [diff, settingChanges]);
+
+  // The toggle hides what is not a difference: fields that match, and the settings the
+  // cluster writes itself. Both are noise by default and worth having on demand.
+  const hidden = (kind: RowKind) => kind === 'unchanged' || kind === 'generated';
 
   const visible = useMemo(
-    () => (diff ?? []).filter((c) => showUnchanged || c.kind !== 'unchanged'),
-    [diff, showUnchanged],
+    () => (rows ?? []).filter((r) => showUnchanged || !hidden(r.kind)),
+    [rows, showUnchanged],
   );
 
   const counts = useMemo(() => {
-    const c: Record<ChangeKind, number> = {
+    const c: Record<RowKind, number> = {
       added: 0,
       removed: 0,
       retyped: 0,
       attributes: 0,
+      setting: 0,
+      generated: 0,
       unchanged: 0,
     };
-    for (const change of diff ?? []) c[change.kind]++;
+    for (const row of rows ?? []) c[row.kind]++;
     return c;
-  }, [diff]);
+  }, [rows]);
+
+  const differenceCount = (rows ?? []).filter((r) => !hidden(r.kind)).length;
+  const quietCount = (rows ?? []).filter((r) => hidden(r.kind)).length;
 
   // Only fields present on the "after" side can be checked — a removed one has nothing
   // to compare against.
@@ -239,19 +289,29 @@ export function SchemaDiffTool() {
         tone="primary"
         title="What differs"
         description={
-          diff
-            ? [
-                `${counts.added} added`,
-                `${counts.removed} removed`,
-                `${counts.retyped} retyped`,
-                ...(bothEs ? [`${counts.attributes} reconfigured`] : []),
-                `${counts.unchanged} unchanged`,
-              ].join(' · ')
+          rows
+            ? differenceCount === 0
+              ? `Nothing differs${quietCount > 0 ? ` · ${quietCount} hidden` : ''}`
+              : [
+                  counts.added > 0 && `${counts.added} added`,
+                  counts.removed > 0 && `${counts.removed} removed`,
+                  counts.retyped > 0 && `${counts.retyped} retyped`,
+                  counts.attributes > 0 && `${counts.attributes} reconfigured`,
+                  counts.setting > 0 && `${counts.setting} setting${counts.setting === 1 ? '' : 's'}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
             : undefined
         }
         actions={
           <>
-            <Toggle checked={showUnchanged} onChange={setShowUnchanged} label="Show unchanged" />
+            {quietCount > 0 && (
+              <Toggle
+                checked={showUnchanged}
+                onChange={setShowUnchanged}
+                label={`Show ${quietCount} unchanged`}
+              />
+            )}
             <Button
               variant="primary"
               onClick={sendToGenerator}
@@ -276,7 +336,7 @@ export function SchemaDiffTool() {
             data rather than a fact about the schemas — so it is left to you. Paste two of the same
             kind.
           </Note>
-        ) : !diff ? (
+        ) : !rows ? (
           <p className="text-sm text-ink-500 dark:text-ink-400">
             Paste a schema on both sides to see the difference.
           </p>
@@ -289,31 +349,31 @@ export function SchemaDiffTool() {
             <table className="w-full text-left text-[13px]">
               <thead>
                 <tr className="border-b border-[var(--border-card)] text-ink-500 dark:text-ink-400">
-                  <th className="py-2 pr-4 font-medium">{bothEs ? 'Field' : 'Column'}</th>
+                  <th className="py-2 pr-4 font-medium">{bothEs ? 'Field or setting' : 'Column'}</th>
                   <th className="py-2 pr-4 font-medium">Status</th>
                   <th className="py-2 pr-4 font-medium">Before</th>
                   <th className="py-2 font-medium">After</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((change) => (
+                {visible.map((row) => (
                   <tr
-                    key={change.name}
+                    key={`${row.kind}:${row.name}`}
                     className="border-b border-[var(--border-card)] align-top last:border-0"
                   >
-                    <td className="py-2 pr-4 font-mono font-medium">{change.name}</td>
+                    <td className="py-2 pr-4 font-mono font-medium">{row.name}</td>
                     <td className="py-2 pr-4">
                       <span
-                        className={`rounded px-1.5 py-0.5 text-xs whitespace-nowrap ${STATUS_STYLE[change.kind]}`}
+                        className={`rounded px-1.5 py-0.5 text-xs whitespace-nowrap ${STATUS_STYLE[row.kind]}`}
                       >
-                        {STATUS_LABEL[change.kind]}
+                        {STATUS_LABEL[row.kind]}
                       </span>
                     </td>
                     <td className="py-2 pr-4 font-mono text-ink-500 dark:text-ink-400">
-                      <Cell type={change.before} attributes={change.attributes} side="before" />
+                      <Cell type={row.before} attributes={row.attributes} side="before" />
                     </td>
                     <td className="py-2 font-mono text-ink-500 dark:text-ink-400">
-                      <Cell type={change.after} attributes={change.attributes} side="after" />
+                      <Cell type={row.after} attributes={row.attributes} side="after" />
                     </td>
                   </tr>
                 ))}
@@ -321,45 +381,15 @@ export function SchemaDiffTool() {
             </table>
           </div>
         )}
+
+        {bothEs && counts.generated > 0 && (
+          <p className="mt-4 text-xs leading-relaxed text-ink-500 dark:text-ink-400">
+            {counts.generated} settings are written by Elasticsearch when it creates the index —
+            the uuid, the creation date and so on — so they cannot appear in the mapping you sent.
+            They are never counted as differences.
+          </p>
+        )}
       </Panel>
-
-      {bothEs && (
-        <Panel
-          title="Index settings"
-          description={
-            realSettingChanges.length === 0
-              ? `Matching${generatedSettings.length > 0 ? `, apart from ${generatedSettings.length} the cluster writes itself` : ''}`
-              : `${realSettingChanges.length} differ${realSettingChanges.length === 1 ? 's' : ''}`
-          }
-          actions={
-            generatedSettings.length > 0 ? (
-              <Toggle
-                checked={showGenerated}
-                onChange={setShowGenerated}
-                label="Show cluster-generated"
-              />
-            ) : undefined
-          }
-        >
-          {realSettingChanges.length === 0 ? (
-            <Note tone="success">
-              Every setting you specified came through unchanged.
-            </Note>
-          ) : (
-            <SettingTable rows={realSettingChanges} />
-          )}
-
-          {generatedSettings.length > 0 && showGenerated && (
-            <div className="mt-4">
-              <p className="mb-2 text-xs text-ink-500 dark:text-ink-400">
-                Written by Elasticsearch when the index was created, so they cannot appear in the
-                mapping you sent. Never counted as differences.
-              </p>
-              <SettingTable rows={generatedSettings} />
-            </div>
-          )}
-        </Panel>
-      )}
     </div>
   );
 }
@@ -527,34 +557,5 @@ function Cell({
         </ul>
       )}
     </>
-  );
-}
-
-function SettingTable({ rows }: { rows: EsSettingChange[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-[13px]">
-        <thead>
-          <tr className="border-b border-[var(--border-card)] text-ink-500 dark:text-ink-400">
-            <th className="py-2 pr-4 font-medium">Setting</th>
-            <th className="py-2 pr-4 font-medium">Before</th>
-            <th className="py-2 font-medium">After</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className="border-b border-[var(--border-card)] last:border-0">
-              <td className="py-2 pr-4 font-mono">{row.key}</td>
-              <td className="py-2 pr-4 font-mono text-ink-500 dark:text-ink-400">
-                {row.before ?? <em className="not-italic">not set</em>}
-              </td>
-              <td className="py-2 font-mono text-ink-500 dark:text-ink-400">
-                {row.after ?? <em className="not-italic">not set</em>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
