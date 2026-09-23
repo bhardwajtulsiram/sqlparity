@@ -41,6 +41,19 @@ export function isNumericLiteral(value: string): boolean {
   return NUMERIC_RE.test(value.trim());
 }
 
+/**
+ * A number as people write one in a list of values: no leading `+`, no exponent.
+ *
+ * `+14155552671` is a phone number and `1E5` is a product code far more often than
+ * either is a number, and writing them unquoted turns them into 14155552671 and
+ * 100000. Auto mode only leaves this narrower shape unquoted.
+ */
+const PLAIN_NUMBER_RE = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$|^-?\.\d+$/;
+
+export function isPlainNumber(value: string): boolean {
+  return PLAIN_NUMBER_RE.test(value.trim());
+}
+
 /** True when a value has a leading zero that would be lost if emitted as a number. */
 export function hasSignificantLeadingZero(value: string): boolean {
   return /^[+-]?0\d/.test(value.trim());
@@ -62,6 +75,7 @@ export type ValueMode = 'auto' | 'string' | 'numeric';
  */
 export function renderValue(value: string, dialect: Dialect, mode: ValueMode): string {
   if (mode === 'string') return quoteString(value, dialect);
-  if (isNumericLiteral(value)) return value.trim();
+  const numeric = mode === 'auto' ? isPlainNumber(value) : isNumericLiteral(value);
+  if (numeric) return value.trim();
   return quoteString(value, dialect);
 }

@@ -8,7 +8,7 @@ import {
   applyCleanup,
   buildInList,
   detectSeparator,
-  parseInList,
+  parseInLists,
   splitValues,
   DEFAULT_BUILD,
   DEFAULT_CLEANUP,
@@ -69,11 +69,20 @@ export function InListBuilder() {
 
   const result = useMemo(() => {
     if (reverse) {
-      const values = parseInList(input, dialect);
+      const { values, lists } = parseInLists(input, dialect);
+      const warnings: Warning[] =
+        lists > 1
+          ? [
+              {
+                level: 'warn',
+                message: `That holds ${lists} IN lists. These are the values of the first one — paste the others on their own to read them.`,
+              },
+            ]
+          : [];
       return {
         output: values.join('\n'),
         valueCount: values.length,
-        warnings: [] as Warning[],
+        warnings,
         report: null,
       };
     }
@@ -90,6 +99,12 @@ export function InListBuilder() {
     });
 
     const warnings = [...build.warnings];
+    if (report.header !== undefined) {
+      warnings.unshift({
+        level: 'info',
+        message: `Left out the first line, "${report.header}", as a column heading. Turn off "Skip a header row" under More options to keep it.`,
+      });
+    }
     if (build.valueCount > MAX_IN_VALUES) {
       warnings.unshift({
         level: 'warn',
@@ -287,6 +302,11 @@ export function InListBuilder() {
             <span className="block text-[13px] font-medium text-ink-700 dark:text-ink-300">
               Clean up the list
             </span>
+            <Toggle
+              checked={cleanup.dropHeader !== false}
+              onChange={(v) => setCleanup({ ...cleanup, dropHeader: v })}
+              label="Skip a header row"
+            />
             <Toggle
               checked={cleanup.trim}
               onChange={(v) => setCleanup({ ...cleanup, trim: v })}

@@ -2,17 +2,25 @@ import type { Dialect } from './dialects';
 import {
   isNullLiteral,
   isNumericLiteral,
+  isPlainNumber,
   hasSignificantLeadingZero,
   quoteIdentifier,
   renderValue,
   type ValueMode,
 } from './escape';
+import { isInLiteral, scan } from './tokenize';
 
 export const MAX_IN_VALUES = 100_000;
 
 /* ------------------------------------------------------------------ parsing */
 
-export type Separator = 'newline' | 'comma' | 'tab' | 'whitespace' | 'newlineAndComma';
+export type Separator =
+  | 'newline'
+  | 'comma'
+  | 'tab'
+  | 'whitespace'
+  | 'newlineAndComma'
+  | 'firstColumn';
 
 export interface Detection {
   separator: Separator;
@@ -29,6 +37,7 @@ export const SEPARATOR_LABELS: Record<Separator, string> = {
   tab: 'Tab separated',
   whitespace: 'Whitespace separated',
   newlineAndComma: 'Lines and commas',
+  firstColumn: 'First column only',
 };
 
 /**
@@ -46,6 +55,19 @@ export function detectSeparator(input: string): Detection {
   const hasComma = text.includes(',');
 
   if (hasTab) {
+    // Several rows of the same number of tab-separated cells is a block copied out of
+    // a spreadsheet. Flattening every cell into one list would mix the columns — IDs
+    // and names in one IN clause — so the first column is read, and the rest offered.
+    const rows = text.split('\n').filter((l) => l.trim() !== '');
+    const widths = rows.map((l) => l.split('\t').length);
+    if (rows.length >= 2 && widths[0]! >= 2 && widths.every((w) => w === widths[0])) {
+      return {
+        separator: 'firstColumn',
+        confident: false,
+        alternatives: ['tab'],
+        reason: `This looks like ${widths[0]} columns copied from a spreadsheet, so only the first column is read. Choose "Tab separated" to use every cell.`,
+      };
+    }
     return {
       separator: 'tab',
       confident: true,
@@ -100,8 +122,12 @@ export function detectSeparator(input: string): Detection {
   return { separator: 'newline', confident: true, alternatives: [], reason: 'Single value.' };
 }
 
-const DELIMITERS: Record<Separator, { chars: Set<string>; splitNewlines: boolean }> = {
+const DELIMITERS: Record<
+  Separator,
+  { chars: Set<string>; splitNewlines: boolean; firstOnly?: boolean }
+> = {
   newline: { chars: new Set(), splitNewlines: true },
+  firstColumn: { chars: new Set(['\t']), splitNewlines: true, firstOnly: true },
   comma: { chars: new Set([',']), splitNewlines: false },
   tab: { chars: new Set(['\t']), splitNewlines: true },
   whitespace: { chars: new Set([' ', '\t']), splitNewlines: true },
@@ -114,12 +140,15 @@ const DELIMITERS: Record<Separator, { chars: Set<string>; splitNewlines: boolean
  * a field are left alone, so `5" pipe` is not mangled.
  */
 export function splitValues(input: string, separator: Separator): string[] {
-  const { chars, splitNewlines } = DELIMITERS[separator];
-  const text = input.replace(/\r\n/g, '\n');
+  const { chars, splitNewlines, firstOnly } = DELIMITERS[separator];
+  // The line break a spreadsheet copy always ends with is not an empty last value.
+  const text = input.replace(/\r\n/g, '\n').replace(/\n+$/, '');
   const values: string[] = [];
   let current = '';
   let inQuotes = false;
   let fieldStarted = false;
+  /** Which cell of the row we are in, for reading only the first column. */
+  let cell = 0;
 
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
@@ -147,7 +176,8 @@ export function splitValues(input: string, separator: Separator): string[] {
 
     const isNewline = ch === '\n';
     if ((isNewline && splitNewlines) || (!isNewline && chars.has(ch))) {
-      values.push(current);
+      if (!firstOnly || cell === 0) values.push(current);
+      cell = isNewline ? 0 : cell + 1;
       current = '';
       fieldStarted = false;
       continue;
@@ -156,9 +186,40 @@ export function splitValues(input: string, separator: Separator): string[] {
     if (!/\s/.test(ch)) fieldStarted = true;
     current += ch;
   }
-  values.push(current);
+  if (!firstOnly || cell === 0) values.push(current);
   return values;
 }
+
+/**
+ * The first line, when it is a column heading rather than a value.
+ *
+ * Nearly every copy out of a spreadsheet brings its header row along, and
+ * `'customer_id'` in an IN list matches nothing and hides among a thousand real
+ * values. The tests are about shape, not vocabulary: a word over a column of numbers,
+ * a word over a column of emails, or a label with a space or underscore over values
+ * that have neither.
+ */
+export function headerOf(values: string[]): string | undefined {
+  const cells = values.map((v) => v.trim()).filter((v) => v !== '');
+  if (cells.length < 3) return undefined;
+  const [first, ...rest] = cells as [string, ...string[]];
+  if (first.length > 40 || isNumericLiteral(first)) return undefined;
+  if (!/^[A-Za-z][A-Za-z0-9 _#.-]*$/.test(first)) return undefined;
+  if (rest.some((v) => v.toLowerCase() === first.toLowerCase())) return undefined;
+
+  const share = (test: (v: string) => boolean) => rest.filter(test).length / rest.length;
+  if (share((v) => /^[+-]?\d/.test(v)) >= 0.9) return first;
+  if (!/\d/.test(first) && share((v) => /\d/.test(v)) >= 0.9) return first;
+  if (!first.includes('@') && share((v) => v.includes('@')) >= 0.9) return first;
+  if (/[ _]/.test(first) && /(?:^|[ _])(?:id|name|code|email|number|no|key|sku|zip|phone)$/i.test(first)) {
+    return first;
+  }
+  return undefined;
+}
+
+/** Characters that are invisible in a text box but make a value match nothing. */
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF\u00A0]/;
+const EDGE_WHITESPACE = /^[\s\u200B-\u200D\u2060\uFEFF]+|[\s\u200B-\u200D\u2060\uFEFF]+$/g;
 
 /* ----------------------------------------------------------------- cleanup */
 
@@ -167,6 +228,8 @@ export interface CleanupOptions {
   dropBlank: boolean;
   dedupe: boolean;
   caseMode: 'preserve' | 'lower' | 'upper';
+  /** Leave out a first line that is a column heading. Unset in older saved settings, read as on. */
+  dropHeader?: boolean;
 }
 
 export const DEFAULT_CLEANUP: CleanupOptions = {
@@ -174,6 +237,7 @@ export const DEFAULT_CLEANUP: CleanupOptions = {
   dropBlank: false,
   dedupe: false,
   caseMode: 'preserve',
+  dropHeader: true,
 };
 
 export interface CleanupReport {
@@ -182,6 +246,8 @@ export interface CleanupReport {
   blanksRemoved: number;
   duplicatesRemoved: number;
   trimmed: number;
+  /** The heading that was left out, when one was. */
+  header?: string;
 }
 
 export function applyCleanup(values: string[], options: CleanupOptions): CleanupReport {
@@ -189,9 +255,20 @@ export function applyCleanup(values: string[], options: CleanupOptions): Cleanup
   let trimmed = 0;
   let out = values;
 
+  let header: string | undefined;
+  if (options.dropHeader !== false) {
+    header = headerOf(values);
+    if (header !== undefined) {
+      const at = values.findIndex((v) => v.trim() !== '');
+      out = [...values.slice(0, at), ...values.slice(at + 1)];
+    }
+  }
+
   if (options.trim) {
     out = out.map((v) => {
-      const t = v.trim();
+      // Zero-width spaces from web pages are whitespace for this purpose, though
+      // String.prototype.trim does not think so.
+      const t = v.replace(EDGE_WHITESPACE, '');
       if (t !== v) trimmed++;
       return t;
     });
@@ -223,7 +300,14 @@ export function applyCleanup(values: string[], options: CleanupOptions): Cleanup
     out = deduped;
   }
 
-  return { values: out, inputCount, blanksRemoved, duplicatesRemoved, trimmed };
+  return {
+    values: out,
+    inputCount,
+    blanksRemoved,
+    duplicatesRemoved,
+    trimmed,
+    ...(header !== undefined ? { header } : {}),
+  };
 }
 
 /* ------------------------------------------------------------------- build */
@@ -315,8 +399,29 @@ export function buildInList(values: string[], options: BuildOptions): BuildResul
     });
   }
 
+  const invisible = values.filter((v) => INVISIBLE.test(v)).length;
+  if (invisible > 0) {
+    warnings.push({
+      level: 'warn',
+      message: `${invisible} ${invisible === 1 ? 'value contains' : 'values contain'} invisible characters — zero-width or non-breaking spaces, usually copied from a web page. A value holding one matches nothing. Turn on "Trim whitespace" to strip them from the ends.`,
+    });
+  }
+
   if (valueMode === 'auto') {
-    const numeric = values.filter((v) => isNumericLiteral(v)).length;
+    const numeric = values.filter((v) => isPlainNumber(v)).length;
+    const numberLike = values.filter((v) => isNumericLiteral(v) && !isPlainNumber(v)).length;
+    if (numberLike > 0) {
+      warnings.push({
+        level: 'info',
+        message: `${numberLike === 1 ? '1 value looks like a number but starts with + or uses' : `${numberLike} values look like numbers but start with + or use`} an exponent (like +14155552671 or 1E5), so ${numberLike === 1 ? 'it was' : 'they were'} quoted as text — as numbers they would become 14155552671 and 100000. Choose Numbers if they really are numbers.`,
+      });
+    }
+    if (numeric > 0 && numeric === values.length) {
+      warnings.push({
+        level: 'info',
+        message: `Every value looks like a number, so none is quoted. If the column holds text — IDs, zip codes, account numbers — choose Text: Athena and PostgreSQL reject a number compared with text, and MySQL quietly converts and can match the wrong rows.`,
+      });
+    }
     if (numeric > 0 && numeric < values.length) {
       warnings.push({
         level: 'warn',
@@ -366,30 +471,66 @@ export function buildInList(values: string[], options: BuildOptions): BuildResul
 
 /* ----------------------------------------------------------------- reverse */
 
+export interface ParsedInList {
+  values: string[];
+  /** How many IN lists the text held. Only the first one's values are returned. */
+  lists: number;
+}
+
 /**
  * Turn an existing IN list back into plain values, one per line.
  *
- * Accepts a bare list, `IN (...)`, or a full `WHERE col IN (...)`, and unescapes
- * string literals according to the dialect's rules.
+ * Accepts a bare list, `IN (...)`, or a whole WHERE clause, and unescapes string
+ * literals according to the dialect's rules. The list is found by its `IN (`, not by
+ * the first bracket in the text — `WHERE lower(email) IN (…)` opens a bracket for
+ * lower() first.
  */
-export function parseInList(input: string, dialect: Dialect): string[] {
-  let text = input.trim();
+export function parseInLists(input: string, dialect: Dialect): ParsedInList {
+  const text = input.trim();
+  const segments = scan(text, dialect);
 
-  const open = text.indexOf('(');
-  if (open !== -1) {
-    const close = text.lastIndexOf(')');
-    if (close > open) text = text.slice(open + 1, close);
+  const opens: number[] = [];
+  for (const m of text.matchAll(/\bIN\s*\(/gi)) {
+    if (!isInLiteral(segments, m.index)) opens.push(m.index + m[0].length - 1);
   }
 
+  const closeOf = (open: number) => {
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+      if (isInLiteral(segments, i)) continue;
+      if (text[i] === '(') depth++;
+      else if (text[i] === ')' && --depth === 0) return i;
+    }
+    return text.length;
+  };
+
+  let body = text;
+  if (opens.length > 0) {
+    body = text.slice(opens[0]! + 1, closeOf(opens[0]!));
+  } else {
+    const open = [...text].findIndex((ch, i) => ch === '(' && !isInLiteral(segments, i));
+    if (open !== -1) body = text.slice(open + 1, closeOf(open));
+  }
+
+  return { values: splitListBody(body, dialect), lists: Math.max(1, opens.length) };
+}
+
+/** Values of the first IN list in the text. */
+export function parseInList(input: string, dialect: Dialect): string[] {
+  return parseInLists(input, dialect).values;
+}
+
+function splitListBody(text: string, dialect: Dialect): string[] {
   const values: string[] = [];
   let current = '';
-  let inString = false;
+  let quote: string | null = null;
   let started = false;
+  let depth = 0;
 
   for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
+    const ch = text[i]!;
 
-    if (inString) {
+    if (quote) {
       if (dialect.backslashIsEscape && ch === '\\') {
         const next = text[i + 1];
         if (next !== undefined) {
@@ -398,12 +539,12 @@ export function parseInList(input: string, dialect: Dialect): string[] {
           continue;
         }
       }
-      if (ch === "'") {
-        if (text[i + 1] === "'") {
-          current += "'";
+      if (ch === quote) {
+        if (text[i + 1] === quote) {
+          current += quote;
           i++;
         } else {
-          inString = false;
+          quote = null;
         }
         continue;
       }
@@ -411,12 +552,14 @@ export function parseInList(input: string, dialect: Dialect): string[] {
       continue;
     }
 
-    if (ch === "'") {
-      inString = true;
+    if (ch === "'" || (ch === '"' && dialect.doubleQuoteIsString)) {
+      quote = ch;
       started = true;
       continue;
     }
-    if (ch === ',') {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
       if (started || current.trim() !== '') values.push(current.trim());
       current = '';
       started = false;

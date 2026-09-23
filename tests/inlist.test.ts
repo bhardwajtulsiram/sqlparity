@@ -9,6 +9,8 @@ import {
   DEFAULT_BUILD,
   DEFAULT_CLEANUP,
   type BuildOptions,
+  headerOf,
+  parseInLists,
 } from '../lib/inlist';
 
 const trino = getDialect('athena');
@@ -34,8 +36,16 @@ describe('separator detection', () => {
     expect(d.confident).toBe(true);
   });
 
-  it('prefers tabs, which usually mean a spreadsheet paste', () => {
+  it('reads only the first column of a block copied from a spreadsheet', () => {
     const d = detectSeparator('a\tvarchar\nb\tbigint');
+    expect(d.separator).toBe('firstColumn');
+    expect(d.confident).toBe(false);
+    expect(d.alternatives).toContain('tab');
+    expect(splitValues('a\tvarchar\nb\tbigint', 'firstColumn')).toEqual(['a', 'b']);
+  });
+
+  it('still reads one tab-separated row as values', () => {
+    const d = detectSeparator('a\tb\tc');
     expect(d.separator).toBe('tab');
     expect(d.confident).toBe(true);
   });
@@ -245,5 +255,79 @@ describe('reverse mode', () => {
     const original = ['C:\\path', "it's"];
     const built = buildInList(original, build({ dialect: mysql, wrapAt: 0 }));
     expect(parseInList(built.output, mysql)).toEqual(original);
+  });
+});
+
+describe('lists as they arrive from spreadsheets and web pages', () => {
+  const clean = (text: string, options = DEFAULT_CLEANUP) =>
+    applyCleanup(splitValues(text, detectSeparator(text).separator), options);
+
+  it('does not turn the line break at the end of a copy into a blank value', () => {
+    expect(splitValues('a\r\nb\r\n', 'newline')).toEqual(['a', 'b']);
+  });
+
+  it('leaves out a header row, and says which', () => {
+    const report = clean('customer_id\r\n00123\r\n45\r\n9001\r\n');
+    expect(report.values).toEqual(['00123', '45', '9001']);
+    expect(report.header).toBe('customer_id');
+  });
+
+  it('recognises headers over emails and over labelled names', () => {
+    expect(headerOf(['email', 'a@x.com', 'b@y.com', 'c@z.com'])).toBe('email');
+    expect(headerOf(['Customer Name', 'Acme', 'Globex', 'Initech'])).toBe('Customer Name');
+  });
+
+  it('does not take an ordinary first value for a header', () => {
+    expect(headerOf(['acme', 'globex', 'initech'])).toBeUndefined();
+    expect(headerOf(['101', '102', '103'])).toBeUndefined();
+    expect(headerOf(['active', 'closed', 'pending'])).toBeUndefined();
+  });
+
+  it('keeps the first line when header detection is switched off', () => {
+    expect(clean('customer_id\n1\n2\n3', { ...DEFAULT_CLEANUP, dropHeader: false }).values).toEqual([
+      'customer_id',
+      '1',
+      '2',
+      '3',
+    ]);
+  });
+
+  it('strips zero-width spaces when trimming, and warns about them otherwise', () => {
+    expect(clean('acme\u200B\nglobex', { ...DEFAULT_CLEANUP, trim: true }).values).toEqual(['acme', 'globex']);
+    const warnings = buildInList(['acme\u200B', 'globex'], build()).warnings.map((w) => w.message);
+    expect(warnings.some((m) => m.includes('invisible characters'))).toBe(true);
+  });
+
+  it('quotes phone numbers and exponent-looking codes in auto mode', () => {
+    const { output, warnings } = buildInList(['+14155552671', '1E5', '42'], build());
+    expect(output).toBe("IN ('+14155552671', '1E5', 42)");
+    expect(warnings.some((w) => w.message.includes('start with +'))).toBe(true);
+  });
+
+  it('points out that an all-number list may be a text column', () => {
+    const { output, warnings } = buildInList(['94105', '10001'], build());
+    expect(output).toBe('IN (94105, 10001)');
+    expect(warnings.some((w) => w.message.includes('choose Text'))).toBe(true);
+  });
+});
+
+describe('reading an IN list back', () => {
+  it('finds the list after IN, not the first bracket', () => {
+    expect(parseInList("WHERE lower(email) IN ('a@x.com', 'b@x.com')", trino)).toEqual(['a@x.com', 'b@x.com']);
+  });
+
+  it('keeps brackets that are part of a value', () => {
+    expect(parseInList("IN ('Acme (UK)', 'Globex')", trino)).toEqual(['Acme (UK)', 'Globex']);
+  });
+
+  it('reads only the first of several lists, and counts them', () => {
+    expect(parseInLists("col NOT IN ('x','y') AND other IN (1,2)", trino)).toEqual({
+      values: ['x', 'y'],
+      lists: 2,
+    });
+  });
+
+  it('unquotes double-quoted values where double quotes make a string', () => {
+    expect(parseInList('IN ("a", "b")', getDialect('hive'))).toEqual(['a', 'b']);
   });
 });
