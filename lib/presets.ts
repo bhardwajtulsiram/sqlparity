@@ -1,3 +1,4 @@
+import { DIALECTS, type Dialect } from './dialects';
 import { applyBindings, type GeneratedQuery, type Variable } from './generate';
 
 /**
@@ -6,8 +7,11 @@ import { applyBindings, type GeneratedQuery, type Variable } from './generate';
  * These are the product's content as much as its features: a first-time visitor should
  * be able to pick one, paste a column list, and see useful SQL without reading docs.
  *
- * Each preset carries a template per dialect family. `default` covers everything that
- * has no specific entry — most of these are ordinary SQL and need no variation.
+ * Each template is built per dialect from three pieces that genuinely differ between
+ * engines — the null-safe comparison, how rows are capped, and whether a query needs a
+ * FROM — rather than written once and hoped portable. The first versions were written
+ * once, and `count_if`, `LIMIT` and `IS DISTINCT FROM` each failed on a different set
+ * of engines, including PostgreSQL, the default.
  */
 
 export interface CombineSpec {
@@ -22,14 +26,18 @@ export interface Preset {
   summary: string;
   /** Longer note shown when the preset is selected. */
   detail?: string;
+  /** One template per dialect id, plus `default` for anything unlisted. */
   templates: Record<string, string>;
   variables: Variable[];
   /** Present when the preset can also be emitted as a single combined query. */
   combine?: Record<string, CombineSpec>;
+  /** Dialects this preset cannot be written for, with the reason shown to the user. */
+  unavailable?: Record<string, string>;
 }
 
 const constant = (name: string, value: string): Variable => ({ name, kind: 'constant', value });
-const bulk = (name: string): Variable => ({ name, kind: 'bulk', value: '' });
+/** A bulk variable whose values are column or table names. */
+const names = (name: string): Variable => ({ name, kind: 'bulk', value: '', identifier: true });
 const typed = (name: string): Variable => ({ name, kind: 'typed', value: '' });
 
 const TABLES = [
@@ -39,6 +47,49 @@ const TABLES = [
   { ...constant('key_out', ''), fallbackTo: 'key' },
 ];
 
+/* ------------------------------------------------------------ dialect pieces */
+
+/** "The two values differ, counting NULL as a value", in this dialect's words. */
+function differs(d: Dialect, a: string, b: string): string {
+  return d.nullSafeNotEqual(a, b);
+}
+
+/** A conditional count every engine here understands. `count_if` is not one of them. */
+const countWhere = (condition: string) => `count(CASE WHEN ${condition} THEN 1 END)`;
+
+/** Cap a SELECT at `limit` rows: SQL Server puts it up front, Oracle and Db2 at the end. */
+function capped(d: Dialect, selectList: string, rest: string, limit: string): string {
+  if (d.id === 'transactsql') return `SELECT TOP (${limit})\n${selectList}\n${rest}`;
+  if (d.id === 'plsql' || d.id === 'db2' || d.id === 'sql') {
+    return `SELECT\n${selectList}\n${rest}\nFETCH FIRST ${limit} ROWS ONLY`;
+  }
+  return `SELECT\n${selectList}\n${rest}\nLIMIT ${limit}`;
+}
+
+/** The FROM clause a SELECT with nothing to select from needs, where one is required. */
+function noTable(d: Dialect): string {
+  if (d.id === 'plsql') return '\nFROM dual';
+  if (d.id === 'db2') return '\nFROM SYSIBM.SYSDUMMY1';
+  return '';
+}
+
+const JOIN = `FROM {{table_a}} a
+  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}`;
+
+const COMPARED_COLUMNS = `  a.{{key}},
+  a.{{field}} AS input_value,
+  b.{{field_out}} AS output_value`;
+
+/** Build a template for every dialect, keyed by id, with `default` as the ANSI version. */
+function perDialect(build: (d: Dialect) => string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const d of DIALECTS) out[d.id] = build(d);
+  out.default = out.sql!;
+  return out;
+}
+
+/* ------------------------------------------------------------------- presets */
+
 export const PRESETS: Preset[] = [
   {
     id: 'column-comparison-sentinel',
@@ -46,20 +97,18 @@ export const PRESETS: Preset[] = [
     summary: 'Row-level differences for one column, using a per-type sentinel inside coalesce.',
     detail:
       'Uses a typed variable so each data type gets an appropriate sentinel. Note the known gap: if one side is NULL and the other holds the sentinel value itself, the rows compare equal and the difference is missed. The null-safe preset below has no such gap.',
-    templates: {
-      default: `SELECT
-  a.{{key}},
-  a.{{field}} AS input_value,
-  b.{{field_out}} AS output_value
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}
-WHERE coalesce(a.{{field}}, {{null_default}}) <> coalesce(b.{{field_out}}, {{null_default}})
-LIMIT {{row_limit}}`,
-    },
+    templates: perDialect((d) =>
+      capped(
+        d,
+        COMPARED_COLUMNS,
+        `${JOIN}\nWHERE coalesce(a.{{field}}, {{null_default}}) <> coalesce(b.{{field_out}}, {{null_default}})`,
+        '{{row_limit}}',
+      ),
+    ),
     variables: [
       ...TABLES,
-      bulk('field'),
-      bulk('field_out'),
+      names('field'),
+      names('field_out'),
       typed('null_default'),
       constant('row_limit', '10'),
     ],
@@ -69,33 +118,16 @@ LIMIT {{row_limit}}`,
     name: 'Column comparison (null-safe)',
     summary: 'The same check with no sentinel — correct for every data type.',
     detail:
-      'IS DISTINCT FROM treats NULL as a comparable value, so no sentinel is needed and no difference can hide behind one. MySQL has no such operator; the null-safe equality operator <=> is used there instead.',
-    templates: {
-      default: `SELECT
-  a.{{key}},
-  a.{{field}} AS input_value,
-  b.{{field_out}} AS output_value
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}
-WHERE a.{{field}} IS DISTINCT FROM b.{{field_out}}
-LIMIT {{row_limit}}`,
-      mysql: `SELECT
-  a.{{key}},
-  a.{{field}} AS input_value,
-  b.{{field_out}} AS output_value
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}
-WHERE NOT (a.{{field}} <=> b.{{field_out}})
-LIMIT {{row_limit}}`,
-      transactsql: `SELECT TOP ({{row_limit}})
-  a.{{key}},
-  a.{{field}} AS input_value,
-  b.{{field_out}} AS output_value
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}
-WHERE EXISTS (SELECT a.{{field}} EXCEPT SELECT b.{{field_out}})`,
-    },
-    variables: [...TABLES, bulk('field'), bulk('field_out'), constant('row_limit', '10')],
+      'Treats NULL as a comparable value, so no sentinel is needed and no difference can hide behind one. Written as IS DISTINCT FROM where the engine has it, as the <=> operator in MySQL, Hive and Spark, and spelled out in full for SQL Server, Oracle and ClickHouse.',
+    templates: perDialect((d) =>
+      capped(
+        d,
+        COMPARED_COLUMNS,
+        `${JOIN}\nWHERE ${differs(d, 'a.{{field}}', 'b.{{field_out}}')}`,
+        '{{row_limit}}',
+      ),
+    ),
+    variables: [...TABLES, names('field'), names('field_out'), constant('row_limit', '10')],
   },
   {
     id: 'mismatch-count',
@@ -103,21 +135,14 @@ WHERE EXISTS (SELECT a.{{field}} EXCEPT SELECT b.{{field_out}})`,
     summary: 'How many rows differ for each column, rather than which rows.',
     detail:
       'Combine this one into a single query to get a whole-table report in one run — far cheaper than one query per column on a billing-by-bytes-scanned engine.',
-    templates: {
-      default: `SELECT
+    templates: perDialect(
+      (d) => `SELECT
   '{{field}}' AS field,
   count(*) AS mismatches
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}
-WHERE a.{{field}} IS DISTINCT FROM b.{{field_out}}`,
-      mysql: `SELECT
-  '{{field}}' AS field,
-  count(*) AS mismatches
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}
-WHERE NOT (a.{{field}} <=> b.{{field_out}})`,
-    },
-    variables: [...TABLES, bulk('field'), bulk('field_out')],
+${JOIN}
+WHERE ${differs(d, 'a.{{field}}', 'b.{{field_out}}')}`,
+    ),
+    variables: [...TABLES, names('field'), names('field_out')],
     combine: {
       default: { header: '', separator: '\nUNION ALL\n', footer: '\nORDER BY mismatches DESC' },
     },
@@ -128,16 +153,15 @@ WHERE NOT (a.{{field}} <=> b.{{field_out}})`,
     summary: 'Every column checked in one pass over the tables.',
     detail:
       'Generates one fragment per column; combine them to get a single query that scans the tables once and returns a mismatch count per column. On Athena this is the cheapest way to check hundreds of columns.',
-    templates: {
-      default: `  count_if(a.{{field}} IS DISTINCT FROM b.{{field_out}}) AS {{field}}`,
-      mysql: `  sum(NOT (a.{{field}} <=> b.{{field_out}})) AS {{field}}`,
-    },
-    variables: [...TABLES, bulk('field'), bulk('field_out')],
+    templates: perDialect(
+      (d) => `  ${countWhere(differs(d, 'a.{{field}}', 'b.{{field_out}}'))} AS {{field}}`,
+    ),
+    variables: [...TABLES, names('field'), names('field_out')],
     combine: {
       default: {
         header: 'SELECT\n',
         separator: ',\n',
-        footer: '\nFROM {{table_a}} a\n  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}',
+        footer: `\n${JOIN}`,
       },
     },
   },
@@ -145,55 +169,45 @@ WHERE NOT (a.{{field}} <=> b.{{field_out}})`,
     id: 'null-rate',
     name: 'Null rate per column',
     summary: 'Whether nulls appeared or vanished during the migration.',
-    templates: {
-      default: `SELECT
+    templates: perDialect(
+      () => `SELECT
   '{{field}}' AS field,
   count(*) AS total_rows,
-  count_if(a.{{field}} IS NULL) AS input_nulls,
-  count_if(b.{{field_out}} IS NULL) AS output_nulls
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}`,
-      mysql: `SELECT
-  '{{field}}' AS field,
-  count(*) AS total_rows,
-  sum(a.{{field}} IS NULL) AS input_nulls,
-  sum(b.{{field_out}} IS NULL) AS output_nulls
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}`,
-    },
-    variables: [...TABLES, bulk('field'), bulk('field_out')],
+  ${countWhere('a.{{field}} IS NULL')} AS input_nulls,
+  ${countWhere('b.{{field_out}} IS NULL')} AS output_nulls
+${JOIN}`,
+    ),
+    variables: [...TABLES, names('field'), names('field_out')],
     combine: { default: { header: '', separator: '\nUNION ALL\n', footer: '' } },
   },
   {
     id: 'distinct-count',
     name: 'Distinct count per column',
     summary: 'Cardinality drift — did a column lose or gain distinct values.',
-    templates: {
-      default: `SELECT
+    templates: perDialect(
+      () => `SELECT
   '{{field}}' AS field,
   count(DISTINCT a.{{field}}) AS input_distinct,
   count(DISTINCT b.{{field_out}}) AS output_distinct
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}`,
-    },
-    variables: [...TABLES, bulk('field'), bulk('field_out')],
+${JOIN}`,
+    ),
+    variables: [...TABLES, names('field'), names('field_out')],
     combine: { default: { header: '', separator: '\nUNION ALL\n', footer: '' } },
   },
   {
     id: 'range-check',
     name: 'Min / max / sum per column',
     summary: 'Range and total checks for numeric and date columns.',
-    templates: {
-      default: `SELECT
+    templates: perDialect(
+      () => `SELECT
   '{{field}}' AS field,
   min(a.{{field}}) AS input_min,
   max(a.{{field}}) AS input_max,
   min(b.{{field_out}}) AS output_min,
   max(b.{{field_out}}) AS output_max
-FROM {{table_a}} a
-  JOIN {{table_b}} b ON a.{{key}} = b.{{key_out}}`,
-    },
-    variables: [...TABLES, bulk('field'), bulk('field_out')],
+${JOIN}`,
+    ),
+    variables: [...TABLES, names('field'), names('field_out')],
     combine: { default: { header: '', separator: '\nUNION ALL\n', footer: '' } },
   },
   {
@@ -201,48 +215,63 @@ FROM {{table_a}} a
     name: 'Column existence check',
     summary: 'Which columns exist in one table but not the other.',
     detail:
-      'Reads information_schema, so it tells you about schema drift without scanning any data.',
-    templates: {
-      default: `SELECT
+      'Reads the catalog, so it tells you about schema drift without scanning any data. Names are compared case-insensitively, since engines that fold unquoted names store them in upper or lower case.',
+    templates: perDialect((d) => {
+      const matches = (column: string, value: string) => `lower(${column}) = lower('${value}')`;
+      if (d.id === 'sqlite') {
+        const has = (table: string) =>
+          `(SELECT count(*) FROM pragma_table_info('${table}') WHERE ${matches('name', '{{field}}')})`;
+        return `SELECT
   '{{field}}' AS field,
-  count_if(table_name = '{{table_a}}') AS in_input,
-  count_if(table_name = '{{table_b}}') AS in_output
-FROM information_schema.columns
-WHERE table_schema = '{{schema}}'
-  AND table_name IN ('{{table_a}}', '{{table_b}}')
-  AND column_name = '{{field}}'`,
-      mysql: `SELECT
+  ${has('{{table_a}}')} AS in_input,
+  ${has('{{table_b}}')} AS in_output`;
+      }
+      const catalog =
+        d.id === 'plsql'
+          ? { from: 'all_tab_columns', schema: 'owner', table: 'table_name', column: 'column_name' }
+          : d.id === 'db2'
+            ? { from: 'syscat.columns', schema: 'tabschema', table: 'tabname', column: 'colname' }
+            : d.id === 'bigquery'
+              ? { from: '{{schema}}.INFORMATION_SCHEMA.COLUMNS', schema: '', table: 'table_name', column: 'column_name' }
+              : { from: 'information_schema.columns', schema: 'table_schema', table: 'table_name', column: 'column_name' };
+      const where = [
+        catalog.schema && matches(catalog.schema, '{{schema}}'),
+        `lower(${catalog.table}) IN (lower('{{table_a}}'), lower('{{table_b}}'))`,
+        matches(catalog.column, '{{field}}'),
+      ].filter(Boolean);
+      return `SELECT
   '{{field}}' AS field,
-  sum(table_name = '{{table_a}}') AS in_input,
-  sum(table_name = '{{table_b}}') AS in_output
-FROM information_schema.columns
-WHERE table_schema = '{{schema}}'
-  AND table_name IN ('{{table_a}}', '{{table_b}}')
-  AND column_name = '{{field}}'`,
-    },
+  ${countWhere(matches(catalog.table, '{{table_a}}'))} AS in_input,
+  ${countWhere(matches(catalog.table, '{{table_b}}'))} AS in_output
+FROM ${catalog.from}
+WHERE ${where.join('\n  AND ')}`;
+    }),
     variables: [
       constant('schema', 'my_schema'),
       constant('table_a', 'input_db'),
       constant('table_b', 'output_db'),
-      bulk('field'),
+      names('field'),
     ],
     combine: { default: { header: '', separator: '\nUNION ALL\n', footer: '' } },
+    unavailable: {
+      hive: 'Hive has no information_schema, so column lists cannot be queried with SQL. Run DESCRIBE on both tables and compare them in the schema diff instead.',
+    },
   },
   {
     id: 'row-count',
     name: 'Row count per table',
     summary: 'Input and output totals, iterating over a list of tables.',
     detail: 'The bulk variable here is the table name rather than a column name.',
-    templates: {
-      default: `SELECT
+    templates: perDialect(
+      (d) => `SELECT
   '{{table}}' AS table_name,
   (SELECT count(*) FROM {{schema_a}}.{{table}}) AS input_rows,
-  (SELECT count(*) FROM {{schema_b}}.{{table}}) AS output_rows`,
-    },
+  (SELECT count(*) FROM {{schema_b}}.{{table}}) AS output_rows${noTable(d)}`,
+    ),
     variables: [
       constant('schema_a', 'input_schema'),
       constant('schema_b', 'output_schema'),
-      bulk('table'),
+      names('table'),
     ],
     combine: { default: { header: '', separator: '\nUNION ALL\n', footer: '' } },
   },
@@ -262,6 +291,11 @@ export function presetCombine(preset: Preset, dialectId: string): CombineSpec | 
 
 export function getPreset(id: string): Preset | undefined {
   return PRESETS.find((p) => p.id === id);
+}
+
+/** Why a preset cannot be used with a dialect, when it cannot. */
+export function presetUnavailable(preset: Preset, dialectId: string): string | undefined {
+  return preset.unavailable?.[dialectId];
 }
 
 /**

@@ -137,7 +137,7 @@ describe('row-wise generation', () => {
 
   it('resolves the typed variable from each row data type', () => {
     const queries = generate(input()).queries;
-    expect(queries[0]!.sql).toContain("coalesce(a.customer_segment, '1')");
+    expect(queries[0]!.sql).toContain("coalesce(a.customer_segment, '~')");
     expect(queries[1]!.sql).toContain('coalesce(a.order_count, -1)');
     expect(queries[2]!.sql).toContain("coalesce(a.last_seen_at, TIMESTAMP '1900-01-01 00:00:00')");
   });
@@ -177,16 +177,39 @@ describe('blocking problems', () => {
     const result = generate(input({ rows: [['geo_col', 'geography']] }));
     expect(result.blocked).toBe(true);
     expect(result.queries).toHaveLength(0);
-    expect(result.problems.some((p) => /No type-map entry for "geography"/.test(p.message))).toBe(
-      true,
-    );
+    expect(
+      result.problems.some(
+        (p) => /no type-map entry/.test(p.message) && /"geography" \(geo_col\)/.test(p.message),
+      ),
+    ).toBe(true);
   });
 
   it('names every missing type at once', () => {
     const result = generate(
       input({ rows: [['a', 'geography'], ['b', 'hllsketch']] }),
     );
-    expect(result.problems.some((p) => /"geography", "hllsketch"/.test(p.message))).toBe(true);
+    expect(
+      result.problems.some((p) => /"geography" \(a\); "hllsketch" \(b\)/.test(p.message)),
+    ).toBe(true);
+  });
+
+  it('skips only the columns it has no sentinel for, and says which', () => {
+    const result = generate(
+      input({
+        rows: [
+          ['customer_segment', 'varchar'],
+          ['tags', 'array<string>'],
+          ['n', 'bigint'],
+        ],
+      }),
+    );
+    expect(result.blocked).toBe(false);
+    expect(result.queries.map((q) => q.label)).toEqual(['customer_segment', 'n']);
+    const warning = result.problems.find(
+      (p) => p.level === 'warn' && /Skipped 1 column/.test(p.message),
+    );
+    expect(warning?.message).toContain('"array" (tags)');
+    expect(warning?.message).toContain('null-safe');
   });
 
   it('blocks when the template uses an undefined variable', () => {
@@ -331,7 +354,7 @@ describe('two bulk variables paired row by row', () => {
     expect(result.queries[0]!.sql).toContain('a.customer_segment AS was');
     expect(result.queries[0]!.sql).toContain('b.cust_segment AS now');
     // The sentinel still comes from the third column, not from either name.
-    expect(result.queries[0]!.sql).toContain("coalesce(a.customer_segment, '1')");
+    expect(result.queries[0]!.sql).toContain("coalesce(a.customer_segment, '~')");
     expect(result.queries[1]!.sql).toContain('coalesce(b.total_orders, -1)');
   });
 
@@ -488,3 +511,104 @@ describe('shipped presets join on the output key', () => {
     }
   });
 })
+
+describe('names that need quoting', () => {
+  const nameVars: Variable[] = [
+    { name: 'field', kind: 'bulk', value: '', identifier: true },
+    { name: 'table_a', kind: 'constant', value: 'input_db' },
+  ];
+  const run = (dialectId: string, field: string) =>
+    generate({
+      template: "SELECT '{{field}}' AS field, a.{{field}} FROM {{table_a}} a",
+      variables: nameVars,
+      dialect: getDialect(dialectId),
+      typeMap: defaultTypeMap(getDialect(dialectId)),
+      mode: 'rowwise',
+      columns: ['field'],
+      rows: [[field]],
+      lists: {},
+    }).queries[0]!;
+
+  it('leaves an ordinary name bare', () => {
+    expect(run('trino', 'customer_id').sql).toBe(
+      "SELECT 'customer_id' AS field, a.customer_id FROM input_db a",
+    );
+  });
+
+  it('quotes a reserved word as a name, but not inside a string literal', () => {
+    expect(run('trino', 'order').sql).toBe(`SELECT 'order' AS field, a."order" FROM input_db a`);
+    expect(run('mysql', 'order').sql).toBe("SELECT 'order' AS field, a.`order` FROM input_db a");
+  });
+
+  it('folds a reserved word to the case the engine stores it in', () => {
+    expect(run('snowflake', 'order').sql).toContain('a."ORDER"');
+    expect(run('postgresql', 'ORDER').sql).toContain('a."order"');
+  });
+
+  it('quotes a name with spaces and escapes an apostrophe in the label', () => {
+    expect(run('postgresql', "Owner's Name").sql).toBe(
+      `SELECT 'Owner''s Name' AS field, a."Owner's Name" FROM input_db a`,
+    );
+  });
+
+  it('keeps a name that was already quoted, and labels it without the quotes', () => {
+    const query = run('postgresql', '"CustomerId"');
+    expect(query.sql).toBe(`SELECT 'CustomerId' AS field, a."CustomerId" FROM input_db a`);
+    expect(query.label).toBe('CustomerId');
+  });
+
+  it('trims stray spaces and carriage returns from pasted names', () => {
+    expect(run('trino', '  customer_id \r').sql).toContain('a.customer_id FROM');
+  });
+
+  it('never quotes a value that is not a name', () => {
+    const result = generate({
+      template: 'SELECT * FROM t WHERE id = {{value}}',
+      variables: [{ name: 'value', kind: 'bulk', value: '' }],
+      dialect: trino,
+      typeMap: defaultTypeMap(trino),
+      mode: 'rowwise',
+      columns: ['value'],
+      rows: [['12345']],
+      lists: {},
+    });
+    expect(result.queries[0]!.sql).toBe('SELECT * FROM t WHERE id = 12345');
+  });
+});
+
+describe('declared types as the engines print them', () => {
+  it('drops lengths and modifiers without gluing words together', () => {
+    expect(normalizeType('timestamp(6) with time zone')).toBe('timestamp with time zone');
+    expect(normalizeType('int(11) unsigned')).toBe('int');
+    expect(normalizeType('Nullable(String)')).toBe('string');
+    expect(normalizeType('LowCardinality(Nullable(String))')).toBe('string');
+    expect(normalizeType('array<struct<a:int>>')).toBe('array');
+    expect(normalizeType('text[]')).toBe('array');
+  });
+
+  it('has an entry for the types real schemas use', () => {
+    const cases: [string, string[]][] = [
+      ['postgresql', ['timestamptz', 'int4', 'int8', 'float8', 'bool', 'jsonb', 'uuid', 'bytea', 'serial']],
+      ['mysql', ['int(11) unsigned', 'longtext', 'mediumtext', 'tinyint(1)', 'datetime(6)', "enum('a','b')", 'bit(1)']],
+      ['transactsql', ['money', 'uniqueidentifier', 'datetimeoffset', 'smalldatetime', 'nvarchar(max)']],
+      ['plsql', ['VARCHAR2(20 BYTE)', 'NVARCHAR2(50)', 'NUMBER(6,0)', 'RAW(16)', 'TIMESTAMP(6)']],
+      ['snowflake', ['TIMESTAMP_NTZ(9)', 'TIMESTAMP_LTZ', 'NUMBER(38,0)', 'VARCHAR(16777216)']],
+      ['bigquery', ['INT64', 'BIGNUMERIC', 'DATETIME', 'BYTES']],
+      ['trino', ['timestamp(6) with time zone', 'varbinary', 'uuid', 'char(2)']],
+      ['clickhouse', ['UInt64', 'Nullable(String)', 'LowCardinality(String)', 'DateTime', 'Date32', 'UUID']],
+    ];
+    for (const [dialectId, types] of cases) {
+      const map = defaultTypeMap(getDialect(dialectId));
+      for (const type of types) {
+        expect(resolveType(type, map).missing, `${dialectId}: ${type}`).toBeUndefined();
+      }
+    }
+  });
+
+  it('marks collections as having no sentinel at all', () => {
+    expect(resolveType('array<string>', defaultTypeMap(trino))).toMatchObject({
+      missing: 'array',
+      unsentinelable: true,
+    });
+  });
+});

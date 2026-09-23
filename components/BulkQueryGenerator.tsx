@@ -9,18 +9,31 @@ import {
   extractPlaceholders,
   generate,
   markVariable,
-  parseGrid,
   type IterationMode,
   type Variable,
   type VariableKind,
 } from '@/lib/generate';
-import { PRESETS, combineQueries, getPreset, presetCombine, presetTemplate } from '@/lib/presets';
+import {
+  PRESETS,
+  combineQueries,
+  getPreset,
+  presetCombine,
+  presetTemplate,
+  presetUnavailable,
+} from '@/lib/presets';
+import { nameForList } from '@/lib/identifiers';
 import { columnsToGrid, looksLikeDdl, parseDdl, type DdlColumn, type DdlParseResult } from '@/lib/ddl';
 import { lintSql } from '@/lib/lint';
 import { probeTemplate, supportsValidation } from '@/lib/validate';
 import { checkFieldsAgainstSchema } from '@/lib/schema-check';
 import { takeFieldsHandoff } from '@/lib/handoff';
-import { defaultTypeMap, effectiveTypeMap, normalizeType, type TypeMap } from '@/lib/typemap';
+import {
+  defaultTypeMap,
+  effectiveTypeMap,
+  normalizeType,
+  resolveType,
+  type TypeMap,
+} from '@/lib/typemap';
 import { downloadExcel, downloadNumberedSet, downloadSqlFile } from '@/lib/export';
 import { usePersistentState } from '@/lib/settings';
 import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
@@ -154,6 +167,8 @@ export function BulkQueryGenerator() {
     state: 'idle' | 'parsing' | 'ready' | 'error';
     columns: DdlColumn[];
     table?: string;
+    /** Why it could not be read, when it could not. */
+    problem?: string;
   }>({ state: 'idle', columns: [] });
 
   const editorApi = useRef<SqlEditorApi | null>(null);
@@ -197,7 +212,12 @@ export function BulkQueryGenerator() {
     const timer = setTimeout(() => {
       parseDdl(refDdlText, dialectId)
         .then((r) => {
-          if (!cancelled) setRefSchema({ state: 'ready', columns: r.columns, table: r.table });
+          if (cancelled) return;
+          if (r.columns.length === 0) {
+            setRefSchema({ state: 'error', columns: [], problem: r.errors[0]?.message });
+            return;
+          }
+          setRefSchema({ state: 'ready', columns: r.columns, table: r.table });
         })
         .catch(() => {
           if (!cancelled) setRefSchema({ state: 'error', columns: [] });
@@ -343,6 +363,49 @@ export function BulkQueryGenerator() {
   const nameStat = useMemo(() => statOf(names), [names]);
   const outStat = useMemo(() => statOf(outNames), [outNames]);
   const typeStat = useMemo(() => statOf(types), [types]);
+
+  /**
+   * Take a paste into the names box, splitting it when it holds several columns.
+   *
+   * Copying two columns out of a spreadsheet gives tab-separated rows. Left as they
+   * are, each "name" would be `customer_id<TAB>varchar` and every query would be
+   * broken. The second column goes where it belongs — the types box when it holds
+   * types, the output names box otherwise.
+   */
+  const [splitNote, setSplitNote] = useState<string | null>(null);
+  function acceptNames(text: string) {
+    if (!text.includes('\t')) {
+      setNamesText(text);
+      setSplitNote(null);
+      return;
+    }
+    const rows = text.split(/\r?\n/).map((line) => line.split('\t').map((cell) => cell.trim()));
+    const width = Math.max(...rows.map((r) => r.length));
+    const column = (i: number) => rows.map((r) => r[i] ?? '').join('\n');
+    const looksLikeTypes = (i: number) => {
+      const cells = rows.map((r) => r[i] ?? '').filter((c) => c !== '');
+      const typed = cells.filter(
+        (c) => resolveType(c, typeMap).missing === undefined || /[(<\[]/.test(c),
+      );
+      return cells.length > 0 && typed.length >= cells.length * 0.8;
+    };
+    setNamesText(column(0));
+    const placed: string[] = [];
+    for (let i = 1; i < Math.min(width, 3); i++) {
+      if (looksLikeTypes(i)) {
+        setTypesText(column(i));
+        placed.push('data types');
+      } else {
+        setOutNamesText(column(i));
+        placed.push('output column names');
+      }
+    }
+    setSplitNote(
+      `That paste had ${width} columns. The first went into column names${
+        placed.length > 0 ? `, then ${placed.join(' and ')}` : ''
+      }${width > 3 ? `; the other ${width - 3} were left out` : ''}.`,
+    );
+  }
 
   /** Drops blank lines from a list, keeping the rest in order. */
   const dropBlanks = (text: string) =>
@@ -635,6 +698,11 @@ export function BulkQueryGenerator() {
             {preset?.detail}
           </p>
         )}
+        {preset && presetUnavailable(preset, dialectId) && (
+          <div className="mt-3">
+            <Note tone="warn">{presetUnavailable(preset, dialectId)}</Note>
+          </div>
+        )}
       </div>
 
       {/* Setup on the left, results on the right and pinned, so the queries stay in
@@ -896,40 +964,56 @@ export function BulkQueryGenerator() {
           )}
 
           {ddl.state === 'ready' && ddl.result && (
-            <Note tone={ddl.result.columns.length > 0 ? 'info' : 'warn'}>
+            <Note tone={ddl.result.columns.length > 0 && ddl.result.errors.length === 0 ? 'info' : 'warn'}>
               {ddl.result.columns.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <span>
-                    Found <strong>{ddl.result.columns.length}</strong> column
-                    {ddl.result.columns.length === 1 ? '' : 's'}
-                    {ddl.result.table ? ` in ${ddl.result.table}` : ''}.
-                  </span>
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      const cols = ddl.result!.columns;
-                      setNamesText(cols.map((c) => c.name).join('\n'));
-                      setTypesText(cols.map((c) => c.type).join('\n'));
-                    }}
-                  >
-                    Fill the boxes with them
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>
+                      Found <strong>{ddl.result.columns.length}</strong> column
+                      {ddl.result.columns.length === 1 ? '' : 's'}
+                      {ddl.result.table ? ` in ${ddl.result.table}` : ''}.
+                    </span>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        const cols = ddl.result!.columns;
+                        setNamesText(cols.map((c) => nameForList(c.name, c.quoted, dialect)).join('\n'));
+                        setTypesText(cols.map((c) => c.type).join('\n'));
+                      }}
+                    >
+                      Fill the boxes with them
+                    </Button>
+                  </div>
+                  {ddl.result.errors.length > 0 && (
+                    <p>
+                      Some of it could not be read, so columns may be missing:{' '}
+                      {ddl.result.errors
+                        .slice(0, 3)
+                        .map((e) => `line ${e.line}: ${e.message}`)
+                        .join(' · ')}
+                    </p>
+                  )}
+                  {ddl.result.notes?.map((note) => <p key={note}>{note}</p>)}
                 </div>
               ) : (
                 <span>
-                  That parsed, but no columns came out of it — check it is a CREATE TABLE with a
-                  column list.
+                  No columns could be read from that
+                  {ddl.result.errors[0]
+                    ? ` — line ${ddl.result.errors[0].line}: ${ddl.result.errors[0].message}`
+                    : '.'}
                 </span>
               )}
             </Note>
           )}
+
+          {splitNote && <Note>{splitNote}</Note>}
 
           <div className="grid gap-4 md:grid-cols-3">
             <ColumnBox
               label="Column names"
               help="One per line."
               value={namesText}
-              onChange={setNamesText}
+              onChange={acceptNames}
               count={
                 nameStat.rows === 0
                   ? 'Nothing pasted yet'
@@ -995,8 +1079,9 @@ export function BulkQueryGenerator() {
           <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/60 dark:bg-amber-950/30">
             <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
               {missingTypes.length === 1 ? 'One data type is' : `${missingTypes.length} data types are`}{' '}
-              not in the type map for {dialect.label}. Give{' '}
-              {missingTypes.length === 1 ? 'it' : 'them'} a value to continue.
+              not in the type map for {dialect.label}, so the columns that have{' '}
+              {missingTypes.length === 1 ? 'it' : 'them'} were left out. Give{' '}
+              {missingTypes.length === 1 ? 'it' : 'them'} a value to include them.
             </p>
             <div className="mt-3 space-y-2">
               {missingTypes.map((type) => (
@@ -1016,7 +1101,9 @@ export function BulkQueryGenerator() {
             </div>
             <p className="mt-3 text-xs text-amber-800 dark:text-amber-300">
               Guessing a value here would produce queries that run cleanly and report the wrong
-              answer, so generation stops until you decide.
+              answer, so those columns stay out until you decide. Arrays, maps, structs and JSON
+              have no safe stand-in value — the null-safe comparison preset checks them without
+              one.
             </p>
           </div>
         )}
@@ -1087,7 +1174,9 @@ export function BulkQueryGenerator() {
 
             {refSchema.state === 'error' && (
               <div className="mt-3">
-                <Note tone="warn">Could not read that as a CREATE TABLE.</Note>
+                <Note tone="warn">
+                  Could not read that as a CREATE TABLE{refSchema.problem ? ` — ${refSchema.problem}` : '.'}
+                </Note>
               </div>
             )}
 

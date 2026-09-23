@@ -1,5 +1,7 @@
 import type { Dialect } from './dialects';
-import { replaceToken } from './tokenize';
+import { escapeStringBody } from './escape';
+import { renderName, unquoteName } from './identifiers';
+import { replaceToken, scan } from './tokenize';
 import { resolveType, type TypeMap } from './typemap';
 
 export const MAX_TEMPLATE_ROWS = 5_000;
@@ -22,6 +24,15 @@ export interface Variable {
    * skipped, rather than making someone type the same value twice.
    */
   fallbackTo?: string;
+  /**
+   * The values are names — columns or tables — rather than arbitrary text.
+   *
+   * Such a value is quoted where the template uses it as a name and it needs quoting
+   * (`order`, `Customer Name`), and written as plain text where the template puts it
+   * inside a string literal (`'{{field}}' AS field`). Off for anything else, since a
+   * value like `12345` is not a name and must never be wrapped in quotes.
+   */
+  identifier?: boolean;
 }
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
@@ -50,6 +61,39 @@ export function markVariable(
   dialect: Dialect,
 ): string {
   return replaceToken(template, token, `{{${variableName}}}`, dialect);
+}
+
+/**
+ * Substitute bindings, writing name values the way each position in the template needs.
+ *
+ * The same `{{field}}` can appear as a column reference (`a.{{field}}`), inside a
+ * string literal (`'{{field}}' AS field`) and inside quotes the author wrote
+ * themselves (`"{{field}}"`). Each wants the name differently, so the template is read
+ * with the dialect's scanner and each placeholder is filled for where it sits.
+ */
+export function bindTemplate(
+  template: string,
+  bindings: Record<string, string>,
+  names: ReadonlySet<string>,
+  dialect: Dialect,
+): string {
+  if (names.size === 0) return applyBindings(template, bindings);
+  return scan(template, dialect)
+    .map((segment) =>
+      segment.text.replace(PLACEHOLDER, (whole, name: string) => {
+        if (!Object.prototype.hasOwnProperty.call(bindings, name)) return whole;
+        const value = bindings[name]!;
+        if (!names.has(name)) return value;
+        const bare = unquoteName(value.trim(), dialect);
+        if (segment.kind === 'string') return escapeStringBody(bare, dialect);
+        if (segment.kind === 'identifier') {
+          const { close, escapeClose } = dialect.identifier;
+          return bare.replaceAll(close, escapeClose);
+        }
+        return renderName(value, dialect);
+      }),
+    )
+    .join('');
 }
 
 /** Substitute a full set of bindings. Unknown placeholders are left untouched. */
@@ -174,7 +218,10 @@ export function generate(input: GenerateInput): GenerateResult {
   for (const constant of constants) base[constant.name] = constant.value;
 
   const queries: GeneratedQuery[] = [];
-  const missingTypes = new Set<string>();
+  /** Missing type -> the columns skipped because of it. */
+  const skipped = new Map<string, string[]>();
+  let unsentinelable = false;
+  const names = new Set(variables.filter((v) => v.identifier).map((v) => v.name));
 
   const emit = (bindings: Record<string, string>, dataType: string, label: string) => {
     const resolved: Record<string, string> = { ...base, ...bindings };
@@ -182,7 +229,8 @@ export function generate(input: GenerateInput): GenerateResult {
     for (const typed of typedVars) {
       const outcome = resolveType(dataType, typeMap);
       if (outcome.missing !== undefined) {
-        missingTypes.add(outcome.missing);
+        skipped.set(outcome.missing, [...(skipped.get(outcome.missing) ?? []), label]);
+        if (outcome.unsentinelable) unsentinelable = true;
         return;
       }
       resolved[typed.name] = outcome.value!;
@@ -190,7 +238,7 @@ export function generate(input: GenerateInput): GenerateResult {
 
     queries.push({
       index: queries.length + 1,
-      sql: applyBindings(template, resolved),
+      sql: bindTemplate(template, resolved, names, dialect),
       label,
       dataType,
     });
@@ -207,15 +255,18 @@ export function generate(input: GenerateInput): GenerateResult {
     for (const row of rows) {
       if (row.every((cell) => cell.trim() === '')) continue;
 
+      // Pasted cells carry stray spaces and carriage returns; a name is never meant
+      // to include them.
       const bindings: Record<string, string> = {};
       columns.forEach((role, i) => {
         if (role === IGNORED_COLUMN || role === TYPE_COLUMN) return;
-        bindings[role] = row[i] ?? '';
+        bindings[role] = (row[i] ?? '').trim();
       });
 
-      const dataType = typeIndex === -1 ? '' : (row[typeIndex] ?? '');
+      const dataType = typeIndex === -1 ? '' : (row[typeIndex] ?? '').trim();
       const first = bulk[0];
-      const label = first ? (bindings[first.name] ?? '') : (row[0] ?? '');
+      const rawLabel = first ? (bindings[first.name] ?? '') : (row[0] ?? '').trim();
+      const label = first?.identifier ? unquoteName(rawLabel, dialect) : rawLabel;
 
       // A row with no name is not a column to check, even when the other cells on
       // that row are filled — a blank line in the name list paired with a type would
@@ -226,15 +277,27 @@ export function generate(input: GenerateInput): GenerateResult {
     }
   }
 
-  if (missingTypes.size > 0) {
-    const list = [...missingTypes].sort();
+  // A column whose type has no sentinel is skipped, not guessed at — and not allowed
+  // to stop the other 399 columns either. The message names every one, so nothing is
+  // dropped silently.
+  if (skipped.size > 0) {
+    const types = [...skipped.keys()].sort();
+    const columnsSkipped = types.flatMap((t) => skipped.get(t)!);
+    const detail = types
+      .map((t) => {
+        const cols = skipped.get(t)!;
+        const shown = cols.slice(0, 5).join(', ') + (cols.length > 5 ? ` and ${cols.length - 5} more` : '');
+        return `"${t}" (${shown})`;
+      })
+      .join('; ');
+    const advice = unsentinelable
+      ? ' Collections, documents and binary columns have no safe stand-in value — the null-safe comparison preset checks them correctly.'
+      : '';
     problems.push({
-      level: 'block',
-      message: `No type-map entry for ${list
-        .map((t) => `"${t}"`)
-        .join(', ')}. Add ${list.length === 1 ? 'it' : 'them'} to your type map for ${dialect.label} — generating with a guessed value would produce queries that run but report the wrong answer.`,
+      level: queries.length === 0 ? 'block' : 'warn',
+      message: `Skipped ${columnsSkipped.length} column${columnsSkipped.length === 1 ? '' : 's'} with no type-map entry for ${dialect.label}: ${detail}. Add the type to your type map to include ${columnsSkipped.length === 1 ? 'it' : 'them'} — generating with a guessed value would produce queries that run but report the wrong answer.${advice}`,
     });
-    return { queries: [], problems, blocked: true };
+    if (queries.length === 0) return { queries: [], problems, blocked: true };
   }
 
   if (queries.length > MAX_TEMPLATE_ROWS) {

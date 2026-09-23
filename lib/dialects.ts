@@ -38,8 +38,16 @@ export interface Dialect {
   lineComments: string[];
   /** Hard limit on IN-list length, where the dialect imposes one. */
   maxInListSize?: number;
-  /** Null-safe inequality, used by the generator. undefined = dialect has none. */
-  nullSafeNotEqual?: (a: string, b: string) => string;
+  /**
+   * "a and b differ, counting NULL as a value" — what every comparison preset is built
+   * on. Every dialect has one; the ones without an operator for it get it spelled out.
+   */
+  nullSafeNotEqual: (a: string, b: string) => string;
+  /**
+   * Whether `"text"` is a string literal rather than a quoted name. True for the
+   * dialects that quote names with backticks and accept either quote for strings.
+   */
+  doubleQuoteIsString?: boolean;
   notes?: string;
 }
 
@@ -48,6 +56,13 @@ const BACKTICK_IDENT: IdentifierQuoting = { open: '`', close: '`', escapeClose: 
 const BRACKET_IDENT: IdentifierQuoting = { open: '[', close: ']', escapeClose: ']]' };
 
 const isDistinctFrom = (a: string, b: string) => `${a} IS DISTINCT FROM ${b}`;
+const spaceship = (a: string, b: string) => `NOT (${a} <=> ${b})`;
+/**
+ * For engines with no null-safe operator in general use: SQL Server before 2022,
+ * Oracle before 23ai, and ClickHouse, which only allows one inside a JOIN condition.
+ */
+const spelledOut = (a: string, b: string) =>
+  `(${a} <> ${b} OR (${a} IS NULL AND ${b} IS NOT NULL) OR (${a} IS NOT NULL AND ${b} IS NULL))`;
 
 /**
  * Ordered most-used first, not alphabetically and not by what this project was built
@@ -82,7 +97,8 @@ export const DIALECTS: Dialect[] = [
     backslashIsEscape: true,
     identifier: BACKTICK_IDENT,
     lineComments: ['-- ', '#'],
-    nullSafeNotEqual: (a, b) => `NOT (${a} <=> ${b})`,
+    nullSafeNotEqual: spaceship,
+    doubleQuoteIsString: true,
     notes: 'MySQL has no IS DISTINCT FROM; <=> is the null-safe equality operator.',
   },
   {
@@ -105,6 +121,7 @@ export const DIALECTS: Dialect[] = [
     backslashIsEscape: false,
     identifier: BRACKET_IDENT,
     lineComments: ['--'],
+    nullSafeNotEqual: spelledOut,
     notes: 'SQL Server has no IS DISTINCT FROM before 2022; use explicit IS NULL comparisons.',
   },
   {
@@ -117,6 +134,7 @@ export const DIALECTS: Dialect[] = [
     identifier: DOUBLE_QUOTE_IDENT,
     lineComments: ['--'],
     maxInListSize: 1000,
+    nullSafeNotEqual: spelledOut,
     notes: 'Oracle raises ORA-01795 above 1000 expressions in an IN list.',
   },
   {
@@ -128,6 +146,8 @@ export const DIALECTS: Dialect[] = [
     backslashIsEscape: true,
     identifier: BACKTICK_IDENT,
     lineComments: ['-- ', '#'],
+    nullSafeNotEqual: spaceship,
+    doubleQuoteIsString: true,
   },
   {
     id: 'snowflake',
@@ -151,6 +171,7 @@ export const DIALECTS: Dialect[] = [
     identifier: BACKTICK_IDENT,
     lineComments: ['--', '#'],
     nullSafeNotEqual: isDistinctFrom,
+    doubleQuoteIsString: true,
   },
   {
     id: 'redshift',
@@ -187,6 +208,8 @@ export const DIALECTS: Dialect[] = [
     backslashIsEscape: true,
     identifier: BACKTICK_IDENT,
     lineComments: ['--'],
+    nullSafeNotEqual: spaceship,
+    doubleQuoteIsString: true,
   },
   {
     id: 'hive',
@@ -197,6 +220,8 @@ export const DIALECTS: Dialect[] = [
     backslashIsEscape: true,
     identifier: BACKTICK_IDENT,
     lineComments: ['--'],
+    nullSafeNotEqual: spaceship,
+    doubleQuoteIsString: true,
   },
   {
     id: 'clickhouse',
@@ -207,6 +232,7 @@ export const DIALECTS: Dialect[] = [
     backslashIsEscape: true,
     identifier: BACKTICK_IDENT,
     lineComments: ['--'],
+    nullSafeNotEqual: spelledOut,
   },
   {
     id: 'duckdb',
