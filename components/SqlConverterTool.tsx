@@ -99,8 +99,9 @@ export function SqlConverterTool() {
             <Note>Both dialects are the same, so the query is unchanged.</Note>
           ) : result.changes.length === 0 ? (
             <Note>
-              Nothing needed rewriting — {from.label} and {to.label} agree on everything this query
-              uses.
+              {result.unconverted.length === 0
+                ? `Nothing needed rewriting — ${from.label} and ${to.label} agree on everything this query uses.`
+                : 'Nothing was rewritten automatically. The part that differs is listed below, because a mechanical rewrite of it would change the answer.'}
             </Note>
           ) : (
             <ul className="space-y-2">

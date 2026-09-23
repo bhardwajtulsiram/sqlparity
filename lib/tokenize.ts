@@ -64,8 +64,11 @@ export function scan(sql: string, dialect: Dialect): Segment[] {
       continue;
     }
 
-    // String literal
-    if (ch === "'") {
+    // String literal. In MySQL, Hive, Spark and BigQuery a double-quoted run is a
+    // string too; reading it as code let an apostrophe inside `"O'Brien"` open a
+    // string that swallowed the rest of the query.
+    const quote = ch === "'" || (ch === '"' && dialect.doubleQuoteIsString) ? ch : null;
+    if (quote) {
       flushCode(i);
       let j = i + 1;
       while (j < sql.length) {
@@ -73,8 +76,8 @@ export function scan(sql: string, dialect: Dialect): Segment[] {
           j += 2;
           continue;
         }
-        if (sql[j] === "'") {
-          if (sql[j + 1] === "'") {
+        if (sql[j] === quote) {
+          if (sql[j + 1] === quote) {
             j += 2;
             continue;
           }
@@ -191,8 +194,12 @@ export function countToken(sql: string, token: string, dialect: Dialect): number
   return count;
 }
 
+/** What a quoted name becomes in `splitStatements`: a plain word no keyword can match. */
+export const IDENTIFIER_STANDIN = '__id__';
+
 /**
- * The code (non-string, non-comment) text of each `;`-separated statement.
+ * The code of each `;`-separated statement, with every string reduced to `''`, every
+ * quoted name to `__id__` and every comment to a space.
  *
  * Checking is done per statement rather than over the whole input, because "does a
  * WHERE exist anywhere in this text" is the wrong question for a multi-statement
@@ -205,7 +212,22 @@ export function splitStatements(sql: string, dialect: Dialect): string[] {
   let current = '';
 
   for (const segment of scan(sql, dialect)) {
-    if (segment.kind !== 'code') continue;
+    // Contents are hidden but the shape is kept: a string is still a value and a
+    // quoted name is still a name. Dropping them outright turned
+    // `date("created_at")` into `date()` and `x = 'a'` into `x = `, and the checks
+    // reading the result could no longer tell a column from a constant.
+    if (segment.kind === 'string') {
+      current += "''";
+      continue;
+    }
+    if (segment.kind === 'identifier') {
+      current += IDENTIFIER_STANDIN;
+      continue;
+    }
+    if (segment.kind !== 'code') {
+      current += ' ';
+      continue;
+    }
     let from = 0;
     for (;;) {
       const at = segment.text.indexOf(';', from);
