@@ -101,4 +101,54 @@ describe('leading commas', () => {
     const { sql } = formatSql('select a, b from t', trino, settings());
     expect(sql).toMatch(/a,\n/);
   });
+
+  it('moves a comma that sits before a trailing comment', () => {
+    expect(toLeadingCommas('SELECT\n  a, -- first\n  b /* second */,\n  c\nFROM t', trino)).toBe(
+      'SELECT\n  a -- first\n, b /* second */\n, c\nFROM t',
+    );
+  });
+
+  it('does not move a comma inside a comment', () => {
+    const input = 'SELECT\n  a -- one, two,\n  , b';
+    expect(toLeadingCommas(input, trino)).toBe(input);
+  });
+});
+
+describe('templates', () => {
+  it('formats a dbt model without touching the Jinja', () => {
+    const { sql, error } = formatSql(
+      `select {{ dbt_utils.star(ref('orders')) }} from {{ ref('orders') }} where dt = '{{ var("run_date") }}'`,
+      getDialect('snowflake'),
+      settings(),
+    );
+    expect(error).toBeUndefined();
+    expect(sql).toContain("{{ dbt_utils.star(ref('orders')) }}");
+    expect(sql).toContain("FROM\n  {{ ref('orders') }}");
+  });
+
+  it('formats a bulk-generator template with its placeholders', () => {
+    const { sql, error } = formatSql(
+      'select a.{{key}}, a.{{field}} from {{table_a}} a where a.{{field}} is distinct from b.{{field_out}} limit {{row_limit}}',
+      trino,
+      settings(),
+    );
+    expect(error).toBeUndefined();
+    expect(sql).toContain('a.{{field}} IS DISTINCT FROM b.{{field_out}}');
+  });
+
+  it('keeps Jinja blocks', () => {
+    const { sql, error } = formatSql(
+      'select id from {{ ref("e") }} {% if is_incremental() %} where dt > 1 {% endif %}',
+      getDialect('snowflake'),
+      settings(),
+    );
+    expect(error).toBeUndefined();
+    expect(sql).toContain('{% if is_incremental() %}');
+    expect(sql).toContain('{% endif %}');
+  });
+
+  it('still formats PostgreSQL positional parameters', () => {
+    const { error } = formatSql('select * from t where id = $1', getDialect('postgresql'), settings());
+    expect(error).toBeUndefined();
+  });
 });

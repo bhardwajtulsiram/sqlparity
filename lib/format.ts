@@ -80,6 +80,23 @@ export const DEFAULT_FORMAT: FormatSettings = {
   commaPosition: 'trailing',
 };
 
+/**
+ * Template placeholders — dbt/Jinja `{{ ref('x') }}`, `{% if %}` and `{# #}`, and this
+ * app's own `{{field}}` — kept as opaque tokens. Without this the formatter reads the
+ * braces as syntax and refuses the whole query.
+ *
+ * Only passed when the text has one: supplying parameter types replaces the dialect's
+ * own (`$1`, `?`, `:name`), which would stop those formatting.
+ */
+const TEMPLATE_PARAMS = {
+  custom: [
+    { regex: String.raw`\{\{[\s\S]*?\}\}` },
+    { regex: String.raw`\{%[\s\S]*?%\}` },
+    { regex: String.raw`\{#[\s\S]*?#\}` },
+  ],
+};
+const HAS_TEMPLATE = /\{\{|\{%|\{#/;
+
 export interface FormatOutcome {
   sql: string;
   error?: string;
@@ -110,6 +127,7 @@ export function formatSql(
       logicalOperatorNewline: settings.logicalOperatorNewline,
       denseOperators: settings.denseOperators,
       newlineBeforeSemicolon: settings.newlineBeforeSemicolon,
+      ...(HAS_TEMPLATE.test(input) ? { paramTypes: TEMPLATE_PARAMS } : {}),
     });
 
     return {
@@ -135,13 +153,7 @@ export function formatSql(
 export function toLeadingCommas(sql: string, dialect: Dialect): string {
   const segments = scan(sql, dialect);
 
-  const inCode = (index: number): boolean => {
-    for (const seg of segments) {
-      if (index < seg.start) return false;
-      if (index < seg.end) return seg.kind === 'code';
-    }
-    return false;
-  };
+  const segmentAt = (index: number) => segments.find((seg) => index >= seg.start && index < seg.end);
 
   const lines = sql.split('\n');
   const out: string[] = [];
@@ -160,11 +172,20 @@ export function toLeadingCommas(sql: string, dialect: Dialect): string {
       pendingComma = false;
     }
 
-    const trimmedEnd = line.replace(/[ \t]+$/, '');
-    if (trimmedEnd.endsWith(',') && inCode(lineStart + trimmedEnd.length - 1)) {
+    // Look past a comment at the end of the line: `a, -- first` still ends in a comma.
+    let end = line.replace(/[ \t]+$/, '').length;
+    for (;;) {
+      const last = segmentAt(lineStart + end - 1);
+      if (!last || last.kind !== 'comment' || last.start < lineStart) break;
+      end = line.slice(0, last.start - lineStart).replace(/[ \t]+$/, '').length;
+    }
+    const commaAt = end - 1;
+    if (commaAt >= 0 && line[commaAt] === ',' && segmentAt(lineStart + commaAt)?.kind === 'code') {
       // Only defer the comma when there is a following line to carry it.
       pendingComma = true;
-      body = body.replace(/,([ \t]*)$/, '$1').replace(/[ \t]+$/, '');
+      const at = commaAt + (body.length - line.length);
+      const comment = body.slice(at + 1).trim();
+      body = body.slice(0, at).replace(/[ \t]+$/, '') + (comment ? ` ${comment}` : '');
     }
 
     out.push(body);
