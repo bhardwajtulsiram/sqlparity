@@ -8,10 +8,17 @@
  *   what you send   { "mappings": { "properties": { … } }, "settings": { … } }
  *   what you get    { "my_index": { "aliases": {}, "mappings": { … }, "settings": { … } } }
  *
- * So both shapes are accepted. Two other things would otherwise produce differences
- * that are not differences: Elasticsearch does not preserve the order of keys inside
- * a field definition, and it adds four settings of its own on creation. Reporting
- * either as a change would bury the real ones.
+ * So both shapes are accepted, and everything the cluster does to a request on the
+ * way in is undone before comparing, because each of those would otherwise read as a
+ * difference in an index that is exactly what was asked for:
+ *
+ *   - it does not preserve the order of keys inside a field definition;
+ *   - it files every setting under `index.`, so `number_of_shards` comes back as
+ *     `index.number_of_shards`;
+ *   - it leaves out any parameter set to its default value when it reports a mapping;
+ *   - it expands a dotted field name (`"geo.country"`) into an object holding a field;
+ *   - it returns setting values as strings, so `5` comes back as `"5"`;
+ *   - and it writes a handful of settings of its own — the uuid, the creation date.
  */
 
 import { keyLines } from './json-lines';
@@ -28,10 +35,14 @@ export interface EsField {
 }
 
 export interface EsMapping {
-  /** Present only when the document was the GET-index response, which names it. */
+  /** Present when the document names the index: the GET response, or a `PUT index` line. */
   index?: string;
   fields: EsField[];
-  /** Settings flattened to dotted keys, so `index.number_of_shards`. */
+  /**
+   * Index settings flattened to dotted keys under `index.`, plus the mapping's own
+   * top-level parameters (`dynamic`, `_source`, …) under `mappings.`. Both describe how
+   * the index behaves rather than any one field, so they are compared the same way.
+   */
   settings: Record<string, string>;
   /** Line of each setting in the pasted document, keyed the same way. */
   settingLines: Record<string, number>;
@@ -45,8 +56,9 @@ export interface EsParseResult {
 /**
  * Settings Elasticsearch writes itself when it creates the index.
  *
- * They cannot appear in the mapping you sent, so comparing them would report four
+ * They cannot appear in the mapping you sent, so comparing them would report them as
  * differences on every single check and train you to ignore the list.
+ * `_tier_preference` is set on every index since 7.10 unless you set it yourself.
  */
 export const GENERATED_SETTINGS = [
   'index.uuid',
@@ -54,13 +66,130 @@ export const GENERATED_SETTINGS = [
   'index.provided_name',
   'index.version.created',
   'index.version.upgraded',
+  'index.routing.allocation.include._tier_preference',
 ];
+
+/**
+ * Mapping-level parameters, and the value each has when it is not set. A mapping that
+ * leaves `dynamic` out behaves exactly like one that says `"dynamic": true`.
+ */
+const MAPPING_PARAMETERS: Record<string, string | undefined> = {
+  dynamic: 'true',
+  date_detection: 'true',
+  numeric_detection: 'false',
+  subobjects: 'true',
+  dynamic_templates: undefined,
+  dynamic_date_formats: undefined,
+  _source: undefined,
+  _routing: undefined,
+  _meta: undefined,
+  _field_names: undefined,
+  runtime: undefined,
+};
+
+/**
+ * Field parameters and their defaults, per type. Elasticsearch leaves a parameter out
+ * of the mapping it reports when it holds its default, so `"index": true` sent and
+ * nothing returned is not a difference. Only defaults that hold for every version
+ * since 7.x are listed; anything unlisted is compared as written.
+ */
+const COMMON_DEFAULTS: Record<string, unknown> = {
+  index: true,
+  doc_values: true,
+  store: false,
+  boost: 1,
+  coerce: true,
+  ignore_malformed: false,
+  eager_global_ordinals: false,
+  similarity: 'BM25',
+  copy_to: [],
+  meta: {},
+};
+
+const TYPE_DEFAULTS: Record<string, Record<string, unknown>> = {
+  text: {
+    norms: true,
+    index_options: 'positions',
+    fielddata: false,
+    position_increment_gap: 100,
+    term_vector: 'no',
+    analyzer: 'default',
+  },
+  keyword: {
+    norms: false,
+    index_options: 'docs',
+    split_queries_on_whitespace: false,
+    ignore_above: 2147483647,
+  },
+  date: { format: 'strict_date_optional_time||epoch_millis' },
+  date_nanos: { format: 'strict_date_optional_time_nanos||epoch_millis' },
+  object: { enabled: true },
+  nested: { enabled: true, include_in_parent: false, include_in_root: false },
+};
 
 /** Cheap check for routing a pasted document to this parser rather than the SQL one. */
 export function looksLikeEsMapping(text: string): boolean {
-  const trimmed = text.trim();
+  const trimmed = stripConsoleSyntax(text).text.trim();
   if (!trimmed.startsWith('{')) return false;
   return /"(mappings|properties)"\s*:/.test(trimmed);
+}
+
+/**
+ * Undo what Kibana's Dev Tools console adds around a request body.
+ *
+ * Copying a request out of the console gives `PUT my_index` on the first line and may
+ * carry `//` or `#` comments, none of which is JSON. Each is overwritten with spaces
+ * rather than removed, so every line keeps its number and the line references in the
+ * comparison still point at the right place.
+ */
+export function stripConsoleSyntax(text: string): { text: string; index?: string } {
+  let out = '';
+  let index: string | undefined;
+
+  const request = /^(\s*)(PUT|POST|GET)\s+\/?([^\s/?{]+)[^\n]*/i.exec(text);
+  let i = 0;
+  if (request) {
+    const name = request[3]!;
+    if (!name.startsWith('_')) index = decodeURIComponent(name);
+    out = request[1]! + ' '.repeat(request[0].length - request[1]!.length);
+    i = request[0].length;
+  }
+
+  let inString = false;
+  for (; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      out += ch;
+      if (ch === '\\' && i + 1 < text.length) {
+        out += text[++i];
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if ((ch === '/' && text[i + 1] === '/') || ch === '#') {
+      while (i < text.length && text[i] !== '\n') {
+        out += ' ';
+        i++;
+      }
+      if (i < text.length) out += '\n';
+      continue;
+    }
+    if (ch === '/' && text[i + 1] === '*') {
+      const close = text.indexOf('*/', i + 2);
+      const end = close === -1 ? text.length : close + 2;
+      out += text.slice(i, end).replace(/[^\n]/g, ' ');
+      i = end - 1;
+      continue;
+    }
+    out += ch;
+  }
+  return { text: out, index };
 }
 
 /** Stable text for a value, so key order inside an attribute never reads as a change. */
@@ -73,15 +202,34 @@ export function stableJson(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(',')}}`;
 }
 
+/**
+ * A value as Elasticsearch understands it, for comparison only.
+ *
+ * It accepts `"false"` for `false` and `"256"` for `256`, and stores a single
+ * `copy_to` target as a list of one — so those spellings mean the same thing.
+ */
+function normalized(key: string, value: unknown): unknown {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  if (key === 'copy_to' && typeof value === 'string') return [value];
+  return value;
+}
+
 /** Flatten nested settings into dotted keys. Arrays are kept whole as text. */
-function flattenSettings(value: unknown, prefix = '', into: Record<string, string> = {}) {
+function flattenSettings(
+  value: unknown,
+  prefix: string,
+  into: Record<string, { value: string; path: string }>,
+  path: string,
+) {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      flattenSettings(child, prefix ? `${prefix}.${key}` : key, into);
+      flattenSettings(child, prefix ? `${prefix}.${key}` : key, into, path ? `${path}.${key}` : key);
     }
     return into;
   }
-  if (prefix) into[prefix] = Array.isArray(value) ? stableJson(value) : String(value);
+  if (prefix) into[prefix] = { value: Array.isArray(value) ? stableJson(value) : String(value), path };
   return into;
 }
 
@@ -93,11 +241,16 @@ function flattenSettings(value: unknown, prefix = '', into: Record<string, strin
  * the other as a flattened string. Multi-fields — the `fields` block that lets one
  * value be both `text` and `keyword` — are recorded under the dotted sub-name, because
  * that is how you query them.
+ *
+ * A dotted name like `"geo.country"` is filed the way Elasticsearch files it: as the
+ * field `country` inside an object `geo`. Otherwise the request, which says
+ * `geo.country`, and the cluster's answer, which says `geo` holding `country`, would
+ * disagree about a field that exists on both.
  */
 function collectFields(
   properties: Record<string, unknown>,
   prefix: string,
-  into: EsField[],
+  into: Map<string, EsField>,
   /** Where this block sits in the raw document, for looking the line up. */
   jsonPath: string,
   lines: Map<string, number>,
@@ -105,8 +258,17 @@ function collectFields(
   for (const [name, raw] of Object.entries(properties)) {
     if (raw === null || typeof raw !== 'object') continue;
     const definition = raw as Record<string, unknown>;
-    const path = prefix ? `${prefix}.${name}` : name;
     const here = jsonPath ? `${jsonPath}.${name}` : name;
+    const line = lines.get(here);
+
+    // Objects implied by a dotted name, created unless the mapping declares them.
+    const parts = name.split('.').filter(Boolean);
+    let path = prefix;
+    for (const part of parts.slice(0, -1)) {
+      path = path ? `${path}.${part}` : part;
+      if (!into.has(path)) into.set(path, { name: path, type: 'object', attributes: {}, line });
+    }
+    path = path ? `${path}.${parts[parts.length - 1] ?? name}` : (parts[parts.length - 1] ?? name);
 
     const nested = definition.properties as Record<string, unknown> | undefined;
     const multi = definition.fields as Record<string, unknown> | undefined;
@@ -117,12 +279,12 @@ function collectFields(
       attributes[key] = value;
     }
 
-    into.push({
+    into.set(path, {
       name: path,
       // A block with children and no declared type is an object mapping.
       type: typeof definition.type === 'string' ? definition.type : nested ? 'object' : 'unknown',
       attributes,
-      line: lines.get(here),
+      line,
     });
 
     if (nested) collectFields(nested, path, into, `${here}.properties`, lines);
@@ -130,24 +292,53 @@ function collectFields(
   }
 }
 
+type Json = Record<string, unknown>;
+const isObject = (value: unknown): value is Json =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
 export function parseEsMapping(text: string): EsParseResult {
-  const trimmed = text.trim();
-  if (trimmed === '') return { error: 'Nothing to read.' };
+  const cleaned = stripConsoleSyntax(text);
+  // Not trimmed: the text is also what line numbers are counted in, and dropping a
+  // leading blank line would shift every one of them.
+  const source = cleaned.text;
+  if (source.trim() === '') return { error: 'Nothing to read.' };
 
   let document: unknown;
   try {
-    document = JSON.parse(trimmed);
+    document = JSON.parse(source);
   } catch (error) {
     return { error: `That is not valid JSON — ${error instanceof Error ? error.message : error}` };
   }
-  if (document === null || typeof document !== 'object' || Array.isArray(document)) {
+  if (!isObject(document)) {
     return { error: 'Expected a JSON object holding an index mapping.' };
   }
 
-  let body = document as Record<string, unknown>;
-  let index: string | undefined;
+  let body: Json = document;
+  let index: string | undefined = cleaned.index;
   /** Prefix of the raw document we have descended through, for the line lookup. */
   let jsonPrefix = '';
+  const descend = (key: string) => {
+    body = body[key] as Json;
+    jsonPrefix = jsonPrefix ? `${jsonPrefix}.${key}` : key;
+  };
+
+  // GET _index_template returns a list; a single template in it is unwrapped.
+  if (Array.isArray(body.index_templates)) {
+    const templates = body.index_templates as Json[];
+    if (templates.length !== 1) {
+      return { error: `Expected one index template, found ${templates.length}. Paste a single one.` };
+    }
+    const only = templates[0]!;
+    index = typeof only.name === 'string' ? only.name : index;
+    body = { index_template: only.index_template } as Json;
+    jsonPrefix = 'index_templates.0';
+    descend('index_template');
+  }
+
+  // A composable index template keeps its mapping under `template`.
+  if (isObject(body.template) && (body.template.mappings || body.template.settings)) {
+    descend('template');
+  }
 
   // The GET-index response wraps everything in the index name.
   if (!('mappings' in body) && !('properties' in body) && !('settings' in body)) {
@@ -157,49 +348,77 @@ export function parseEsMapping(text: string): EsParseResult {
         error:
           names.length === 0
             ? 'That object is empty.'
-            : `Expected one index, found ${names.length}. Paste a single index, or the mapping on its own.`,
+            : `Expected one index, found ${names.length} (${names.slice(0, 4).join(', ')}). Paste a single index, or the mapping on its own.`,
       };
     }
     index = names[0];
-    jsonPrefix = index;
-    const inner = body[index];
-    if (inner === null || typeof inner !== 'object') {
+    if (!isObject(body[index!])) {
       return { error: `"${index}" does not hold an index definition.` };
     }
-    body = inner as Record<string, unknown>;
+    descend(index!);
   }
 
   const hasMappings = body.mappings !== undefined;
-  const mappings = (body.mappings ?? body) as Record<string, unknown>;
-  if (hasMappings) jsonPrefix = jsonPrefix ? `${jsonPrefix}.mappings` : 'mappings';
-  const properties = (mappings.properties ?? {}) as Record<string, unknown>;
-  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
+  let mappings = (body.mappings ?? body) as Json;
+  let mappingsPath = hasMappings ? (jsonPrefix ? `${jsonPrefix}.mappings` : 'mappings') : jsonPrefix;
+  const settingsBase = jsonPrefix;
+
+  // Before 7.0 a mapping sat under a type name: { "mappings": { "_doc": { "properties": … } } }.
+  if (!isObject(mappings.properties)) {
+    const typeNames = Object.keys(mappings).filter(
+      (k) => isObject(mappings[k]) && isObject((mappings[k] as Json).properties),
+    );
+    if (typeNames.length === 1 && !(typeNames[0]! in MAPPING_PARAMETERS)) {
+      mappingsPath = mappingsPath ? `${mappingsPath}.${typeNames[0]}` : typeNames[0]!;
+      mappings = mappings[typeNames[0]!] as Json;
+    }
+  }
+
+  const properties = (mappings.properties ?? {}) as Json;
+  if (!isObject(properties)) {
     return { error: 'Found no "properties" block, so there are no fields to compare.' };
   }
 
-  const lines = keyLines(trimmed);
-  const fields: EsField[] = [];
+  const lines = keyLines(source);
+  const collected = new Map<string, EsField>();
   collectFields(
     properties,
     '',
-    fields,
-    jsonPrefix ? `${jsonPrefix}.properties` : 'properties',
+    collected,
+    mappingsPath ? `${mappingsPath}.properties` : 'properties',
     lines,
   );
+  const fields = [...collected.values()];
   if (fields.length === 0) {
     return { error: 'The "properties" block is empty, so there are no fields to compare.' };
   }
 
-  const settings = flattenSettings(body.settings ?? {});
-  // The settings block is a sibling of mappings, not a child of it.
-  // Optional dot: the bare shape gives a prefix of exactly 'mappings', the wrapped
-  // one 'index_name.mappings'. Both need it gone.
-  const settingsPrefix = jsonPrefix.replace(/\.?mappings$/, '');
+  // Settings, filed under `index.` the way the cluster files them.
+  const settings: Record<string, string> = {};
   const settingLines: Record<string, number> = {};
-  for (const key of Object.keys(settings)) {
-    const full = settingsPrefix ? `${settingsPrefix}.settings.${key}` : `settings.${key}`;
-    const line = lines.get(full);
-    if (line !== undefined) settingLines[key] = line;
+  const rawSettings = flattenSettings(
+    body.settings ?? {},
+    '',
+    {},
+    settingsBase ? `${settingsBase}.settings` : 'settings',
+  );
+  for (const [key, { value, path }] of Object.entries(rawSettings)) {
+    const filed = key.startsWith('index.') ? key : `index.${key}`;
+    settings[filed] = value;
+    const line = lines.get(path);
+    if (line !== undefined) settingLines[filed] = line;
+  }
+
+  // The mapping's own parameters, compared alongside the settings.
+  for (const [key, fallback] of Object.entries(MAPPING_PARAMETERS)) {
+    const value = mappings[key];
+    if (value === undefined) {
+      if (fallback !== undefined) settings[`mappings.${key}`] = fallback;
+      continue;
+    }
+    settings[`mappings.${key}`] = isObject(value) || Array.isArray(value) ? stableJson(value) : String(value);
+    const line = lines.get(mappingsPath ? `${mappingsPath}.${key}` : key);
+    if (line !== undefined) settingLines[`mappings.${key}`] = line;
   }
 
   return { mapping: { index, fields, settings, settingLines } };
@@ -228,8 +447,21 @@ export interface EsFieldChange {
   afterLine?: number;
 }
 
-/** Which attributes differ between two field definitions, ignoring key order. */
+/** The default for one parameter on one type, or undefined when it has none listed. */
+function defaultFor(type: string, key: string): unknown {
+  const specific = TYPE_DEFAULTS[type];
+  if (specific && key in specific) return specific[key];
+  if (key in COMMON_DEFAULTS) {
+    // text fields have no doc values at all, so there is no default to fall back on.
+    if (type === 'text' && key === 'doc_values') return undefined;
+    return COMMON_DEFAULTS[key];
+  }
+  return undefined;
+}
+
+/** Which attributes differ between two field definitions, ignoring key order and defaults. */
 function attributeDiff(
+  type: string,
   before: Record<string, unknown>,
   after: Record<string, unknown>,
 ): EsAttributeChange[] {
@@ -238,9 +470,17 @@ function attributeDiff(
 
   for (const key of keys) {
     const has = (o: Record<string, unknown>) => Object.prototype.hasOwnProperty.call(o, key);
-    const a = has(before) ? stableJson(before[key]) : undefined;
-    const b = has(after) ? stableJson(after[key]) : undefined;
-    if (a !== b) changes.push({ key, before: a, after: b });
+    const fallback = defaultFor(type, key);
+    const value = (o: Record<string, unknown>) =>
+      has(o) ? normalized(key, o[key]) : fallback;
+    const a = value(before);
+    const b = value(after);
+    if (stableJson(a) === stableJson(b)) continue;
+    changes.push({
+      key,
+      before: has(before) ? stableJson(before[key]) : undefined,
+      after: has(after) ? stableJson(after[key]) : undefined,
+    });
   }
   return changes;
 }
@@ -279,7 +519,7 @@ export function diffEsFields(before: EsField[], after: EsField[]): EsFieldChange
       });
       continue;
     }
-    const attributes = attributeDiff(field.attributes, match.attributes);
+    const attributes = attributeDiff(field.type, field.attributes, match.attributes);
     changes.push({
       name: field.name,
       kind: attributes.length > 0 ? 'attributes' : 'unchanged',
