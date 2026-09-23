@@ -18,6 +18,17 @@ import {
   stripTrailingSemicolon,
   toCsv,
   toTsv,
+  ambiguousDateFormat,
+  swappedDateFormat,
+  decimalCommaColumns,
+  describeCsvFailure,
+  isReadOnlyQuery,
+  readTextShapes,
+  referencedTable,
+  textDisplayColumns,
+  textDisplaySql,
+  textShapeSql,
+  thousandsColumns,
 } from '../lib/scratchpad';
 
 describe('file kinds', () => {
@@ -257,8 +268,8 @@ describe('clipboard payload', () => {
     expect(toTsv(['a', 'b'], [[1, 'two'], [3, 'four']])).toBe('a\tb\n1\ttwo\n3\tfour');
   });
 
-  it('keeps NULL distinguishable from an empty string', () => {
-    expect(toTsv(['a', 'b'], [[null, '']])).toBe('a\tb\nNULL\t');
+  it('keeps NULL distinguishable from an empty string and from the text NULL', () => {
+    expect(toTsv(['a', 'b', 'c'], [[null, '', 'NULL']])).toBe('a\tb\tc\n\\N\t\tNULL');
   });
 
   it('escapes a tab inside a value rather than splitting the column', () => {
@@ -364,5 +375,92 @@ describe('statement tidying for export', () => {
 
   it('does not touch a semicolon inside the statement', () => {
     expect(stripTrailingSemicolon("SELECT ';' AS c")).toBe("SELECT ';' AS c");
+  });
+});
+
+describe('reading a real CSV', () => {
+  const failure =
+    'Conversion Error: CSV Error on Line: 30002 Original Line: 30000,N/A Error when converting column "amount". Could not convert string "N/A" to \'BIGINT\'';
+
+  it('names the row, value and column that broke a load', () => {
+    expect(describeCsvFailure(failure)).toBe(
+      'line 30,002 has "N/A" in amount, which does not fit the BIGINT guessed from the rows above it',
+    );
+    expect(describeCsvFailure('Something else went wrong')).toBeNull();
+  });
+
+  it('passes reader options through', () => {
+    expect(loadSql('t', 'a.csv', 'csv', ['sample_size=-1'])).toBe(
+      `CREATE OR REPLACE TABLE "t" AS SELECT * FROM read_csv_auto('a.csv', sample_size=-1)`,
+    );
+  });
+
+  it('says which way round an ambiguous date was read', () => {
+    expect(ambiguousDateFormat('%m/%d/%Y')).toContain('month first');
+    expect(ambiguousDateFormat('%d.%m.%Y')).toContain('day first');
+    expect(ambiguousDateFormat('%Y-%m-%d')).toBeNull();
+    expect(ambiguousDateFormat(null)).toBeNull();
+    expect(swappedDateFormat('%m/%d/%Y')).toBe('%d/%m/%Y');
+  });
+
+  it('spots numbers written with a decimal comma or thousands separators', () => {
+    const shapes = readTextShapes(['eu', 'us', 'name'], [2, 2, 0, 0, 3, 0, 2, 1, 3, 0, 0, 0]);
+    expect(decimalCommaColumns(shapes)).toEqual(['eu']);
+    expect(thousandsColumns(shapes)).toEqual(['us']);
+  });
+
+  it('counts every shape in one query over a sample', () => {
+    const sql = textShapeSql('t', ['Lifetime Value']);
+    expect(sql).toContain('count("Lifetime Value") AS n0');
+    expect(sql).toContain('LIMIT 10000');
+  });
+});
+
+describe('showing values faithfully', () => {
+  it('sends time, interval, timestamps and nested values through DuckDB text', () => {
+    expect(
+      textDisplayColumns([
+        ['a', 'INTEGER'],
+        ['b', 'TIMESTAMP'],
+        ['c', 'TIME'],
+        ['d', 'INTERVAL'],
+        ['e', 'DECIMAL(10,2)[]'],
+        ['f', 'STRUCT(d DATE, amt DECIMAL(10,3))'],
+        ['g', 'MAP(VARCHAR, INTEGER)'],
+        ['h', 'DATE'],
+        ['i', 'TIMESTAMP WITH TIME ZONE'],
+      ]),
+    ).toEqual(['b', 'c', 'd', 'e', 'f', 'g', 'i']);
+  });
+
+  it('leaves a result with duplicate column names alone', () => {
+    expect(textDisplayColumns([['id', 'TIMESTAMP'], ['id', 'TIMESTAMP']])).toEqual([]);
+  });
+
+  it('wraps only read-only statements', () => {
+    expect(isReadOnlyQuery('SELECT 1')).toBe(true);
+    expect(isReadOnlyQuery('  with x as (select 1) select * from x')).toBe(true);
+    expect(isReadOnlyQuery('FROM t')).toBe(true);
+    expect(isReadOnlyQuery('INSERT INTO t VALUES (1)')).toBe(false);
+    expect(isReadOnlyQuery('CREATE TABLE t AS SELECT 1')).toBe(false);
+  });
+
+  it('casts the named columns and nothing else', () => {
+    expect(textDisplaySql('SELECT ts, n FROM t;', ['ts'])).toBe(
+      'SELECT * REPLACE (CAST("ts" AS VARCHAR) AS "ts") FROM (SELECT ts, n FROM t) AS sqlparity_display',
+    );
+  });
+});
+
+describe('suggesting bare column names with several tables loaded', () => {
+  const tables = [
+    { table: 'orders', columns: ['id'] },
+    { table: 'customers', columns: ['name'] },
+  ];
+
+  it('uses the loaded table the query reads', () => {
+    expect(referencedTable('SELECT  FROM customers WHERE ', tables)).toBe('customers');
+    expect(referencedTable('SELECT * FROM "orders"', tables)).toBe('orders');
+    expect(referencedTable('SELECT 1', tables)).toBeUndefined();
   });
 });

@@ -13,8 +13,8 @@ import {
   formatCell,
   humanSize,
   isNullCell,
-  loadSql,
   MAX_DISPLAY_ROWS,
+  referencedTable,
   shapeResult,
   tableNameFor,
   toCsv,
@@ -111,7 +111,7 @@ export function SqlScratchpadTool() {
       setLoadWarnings([]);
       try {
         const connected = await connection();
-        const { registerFile, runQuery } = await import('@/lib/duckdb');
+        const { loadTable, registerFile, runQuery } = await import('@/lib/duckdb');
         const instance = db.current;
         if (!instance) throw new Error('The engine is not running.');
 
@@ -120,6 +120,9 @@ export function SqlScratchpadTool() {
         const warnings: string[] = [];
         const taken = new Set(files.map((f) => f.table));
 
+        // Each file is loaded on its own. One that fails is reported and the rest carry
+        // on — before, the first failure abandoned the batch, and files already loaded
+        // became tables that were queryable but missing from the list.
         for (const file of list) {
           const kind = fileKind(file.name);
           if (kind === 'unsupported') {
@@ -127,25 +130,31 @@ export function SqlScratchpadTool() {
             continue;
           }
           const table = tableNameFor(file.name, taken);
-          taken.add(table);
 
-          await registerFile(instance, file.name, file);
-          await connected.query(loadSql(table, file.name, kind));
+          try {
+            await registerFile(instance, file.name, file);
+            const notes = await loadTable(connected, table, file.name, kind);
 
-          const counted = await runQuery(connected, `SELECT count(*) FROM "${table}"`);
-          const described = await runQuery(connected, `DESCRIBE "${table}"`);
+            const counted = await runQuery(connected, `SELECT count(*) FROM "${table}"`);
+            const described = await runQuery(connected, `DESCRIBE "${table}"`);
 
-          const columns = described.rows.map((row) => String(row[0]));
-          const sniff = csvSniffWarning(kind, columns) ?? csvHeaderWarning(kind, columns);
-          if (sniff) warnings.push(`${file.name}: ${sniff}`);
+            const columns = described.rows.map((row) => String(row[0]));
+            const sniff = csvSniffWarning(kind, columns) ?? csvHeaderWarning(kind, columns);
+            if (sniff) warnings.push(`${file.name}: ${sniff}`);
+            for (const note of notes) warnings.push(`${file.name}: ${note}`);
 
-          loaded.push({
-            table,
-            filename: file.name,
-            bytes: file.size,
-            rows: Number(counted.rows[0]?.[0] ?? 0),
-            columns,
-          });
+            taken.add(table);
+            loaded.push({
+              table,
+              filename: file.name,
+              bytes: file.size,
+              rows: Number(counted.rows[0]?.[0] ?? 0),
+              columns,
+            });
+          } catch (error) {
+            const text = error instanceof Error ? error.message : String(error);
+            warnings.push(`Could not load ${file.name}: ${text.split('\n')[0]}`);
+          }
         }
 
         if (loaded.length > 0) {
@@ -177,8 +186,8 @@ export function SqlScratchpadTool() {
     setQueryError(null);
     try {
       const connected = await connection();
-      const { runQuery } = await import('@/lib/duckdb');
-      const outcome = await runQuery(connected, current);
+      const { runForDisplay } = await import('@/lib/duckdb');
+      const outcome = await runForDisplay(connected, current);
       ranSql.current = current;
       setResult(shapeResult(outcome.columns, outcome.rows, outcome.totalRows));
       setElapsed(outcome.elapsedMs);
@@ -257,7 +266,10 @@ export function SqlScratchpadTool() {
 
   // What the editor should suggest: only tables that are actually loaded.
   const schema = useMemo(() => completionSchema(files), [files]);
-  const defaultTable = useMemo(() => defaultCompletionTable(files), [files]);
+  const defaultTable = useMemo(
+    () => defaultCompletionTable(files) ?? referencedTable(sql, files),
+    [files, sql],
+  );
 
   return (
     <div className="space-y-5">

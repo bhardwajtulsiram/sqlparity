@@ -1,5 +1,22 @@
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { arrowConverter, stripTrailingSemicolon, type ArrowFieldType } from './scratchpad';
+import {
+  ambiguousDateFormat,
+  arrowConverter,
+  decimalCommaColumns,
+  describeCsvFailure,
+  isReadOnlyQuery,
+  loadSql,
+  quoteName,
+  readTextShapes,
+  stripTrailingSemicolon,
+  swappedDateFormat,
+  textDisplayColumns,
+  textDisplaySql,
+  textShapeSql,
+  thousandsColumns,
+  type ArrowFieldType,
+  type FileKind,
+} from './scratchpad';
 
 /**
  * Lazily start DuckDB, from this origin only.
@@ -124,6 +141,138 @@ export async function runQuery(
   }
 
   return { columns, rows, totalRows, elapsedMs };
+}
+
+/**
+ * Run a statement for the result grid, showing every value the way DuckDB writes it.
+ *
+ * Some types do not survive the trip through Arrow into JavaScript — see
+ * `textDisplayColumns`. For a query that only reads, the column types are looked up
+ * first (DESCRIBE plans the query without running it), and any such column is cast
+ * to text inside the engine. Anything that cannot be described or wrapped simply runs
+ * as written.
+ */
+export async function runForDisplay(
+  connection: AsyncDuckDBConnection,
+  sql: string,
+  cap: number = MAX_MATERIALISED_ROWS,
+): Promise<QueryOutcome> {
+  if (isReadOnlyQuery(sql)) {
+    try {
+      const described = await connection.query(`DESCRIBE ${stripTrailingSemicolon(sql)}`);
+      const pairs = described
+        .toArray()
+        .map((row) => [String(row.column_name), String(row.column_type)] as [string, string]);
+      const cast = textDisplayColumns(pairs);
+      if (cast.length > 0) {
+        try {
+          return await runQuery(connection, textDisplaySql(sql, cast), cap);
+        } catch {
+          // Fall through to the statement as written, which reports its own error.
+        }
+      }
+    } catch {
+      // Not describable — several statements, say. Run it as written.
+    }
+  }
+  return runQuery(connection, sql, cap);
+}
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const listNames = (names: string[]) => names.map((n) => `"${n}"`).join(', ');
+
+/**
+ * Load a dropped file as a table, reading a CSV the way a person would expect.
+ *
+ * Returns notes on anything that was not straightforward, so none of it is silent:
+ * a load that had to look at every row to settle the types, dates whose day and month
+ * could be read either way round, numbers written with a decimal comma or thousands
+ * separators.
+ */
+export async function loadTable(
+  connection: AsyncDuckDBConnection,
+  table: string,
+  registeredName: string,
+  kind: FileKind,
+): Promise<string[]> {
+  const notes: string[] = [];
+  const load = (options: string[] = []) => connection.query(loadSql(table, registeredName, kind, options));
+  if (kind !== 'csv') {
+    await load();
+    return notes;
+  }
+
+  // Types are guessed from a sample of rows. When a later row does not fit, the
+  // whole file is read to decide instead — one extra pass, and the load succeeds.
+  let options: string[] = [];
+  try {
+    await load();
+  } catch (error) {
+    const reason = describeCsvFailure(message(error));
+    if (!reason) throw error;
+    const said = reason.charAt(0).toUpperCase() + reason.slice(1);
+    try {
+      options = ['sample_size=-1'];
+      await load(options);
+      notes.push(`${said}, so the column types were worked out from every row instead of a sample.`);
+    } catch {
+      options = ['all_varchar=true'];
+      await load(options);
+      notes.push(
+        `${said}, and no consistent types could be found, so every column was read as text. Cast columns in your query where you need numbers or dates.`,
+      );
+    }
+  }
+
+  const path = registeredName.replaceAll("'", "''");
+  let delimiter = ',';
+  try {
+    const sniffed = await runQuery(connection, `SELECT Delimiter, DateFormat FROM sniff_csv('${path}')`);
+    delimiter = String(sniffed.rows[0]?.[0] ?? ',');
+    const dateFormat = sniffed.rows[0]?.[1];
+    const order = typeof dateFormat === 'string' ? ambiguousDateFormat(dateFormat) : null;
+    if (order && typeof dateFormat === 'string') {
+      notes.push(
+        `Dates were read ${order}. If the file puts them the other way round, reload it by running: CREATE OR REPLACE TABLE "${quoteName(table)}" AS SELECT * FROM read_csv_auto('${path}', dateformat='${swappedDateFormat(dateFormat)}')`,
+      );
+    }
+  } catch {
+    // Older engines have no sniff_csv. The load itself is fine; only the note is lost.
+  }
+
+  if (options.includes('all_varchar=true')) return notes;
+
+  const described = await runQuery(connection, `DESCRIBE "${quoteName(table)}"`);
+  const textColumns = described.rows.filter((row) => String(row[1]) === 'VARCHAR').map((row) => String(row[0]));
+  if (textColumns.length === 0) return notes;
+
+  const shapeRow = await runQuery(connection, textShapeSql(table, textColumns));
+  const shapes = readTextShapes(textColumns, shapeRow.rows[0] ?? []);
+
+  const comma = decimalCommaColumns(shapes);
+  if (comma.length > 0 && delimiter !== ',') {
+    try {
+      await load([...options, "decimal_separator=','"]);
+      notes.push(
+        `${listNames(comma)} ${comma.length === 1 ? 'is a number' : 'are numbers'} written with a decimal comma (1,5), so the file was read with a comma as the decimal point.`,
+      );
+    } catch {
+      // Leave the table as first loaded.
+    }
+  } else if (comma.length > 0) {
+    notes.push(
+      `${listNames(comma)} ${comma.length === 1 ? 'looks' : 'look'} like numbers with a decimal comma, but the file is comma-separated, so ${comma.length === 1 ? 'it stays' : 'they stay'} text. Convert in a query with replace("${comma[0]}", ',', '.')::DOUBLE.`,
+    );
+  }
+
+  const thousands = thousandsColumns(shapes);
+  if (thousands.length > 0) {
+    notes.push(
+      `${listNames(thousands)} ${thousands.length === 1 ? 'holds numbers' : 'hold numbers'} written with thousands separators (1,234.56), so ${thousands.length === 1 ? 'it was' : 'they were'} read as text. To use them as numbers: replace("${thousands[0]}", ',', '')::DECIMAL(18,2).`,
+    );
+  }
+
+  return notes;
 }
 
 /**

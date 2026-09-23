@@ -70,9 +70,149 @@ export function readerFor(kind: FileKind): string {
  * literal early. Rare, but it produces a syntax error the user cannot explain, and the
  * fix is one replace.
  */
-export function loadSql(table: string, registeredName: string, kind: FileKind): string {
+export function loadSql(
+  table: string,
+  registeredName: string,
+  kind: FileKind,
+  /** Extra reader options, such as `sample_size=-1`. */
+  options: string[] = [],
+): string {
   const path = registeredName.replaceAll("'", "''");
-  return `CREATE OR REPLACE TABLE "${table}" AS SELECT * FROM ${readerFor(kind)}('${path}')`;
+  const args = [`'${path}'`, ...options].join(', ');
+  return `CREATE OR REPLACE TABLE "${quoteName(table)}" AS SELECT * FROM ${readerFor(kind)}(${args})`;
+}
+
+/** A name for use inside double quotes. */
+export function quoteName(name: string): string {
+  return name.replaceAll('"', '""');
+}
+
+/* ------------------------------------------------------ reading a CSV well */
+
+/**
+ * Why a CSV failed to load, in terms of the row that broke it.
+ *
+ * DuckDB guesses each column's type from a sample of rows. A value further down that
+ * does not fit — `N/A` in a column of numbers — fails the whole load with a long
+ * message about sniffer options. This picks out the row, the value and the column.
+ */
+export function describeCsvFailure(message: string): string | null {
+  const line = /CSV Error on Line:\s*(\d+)/i.exec(message)?.[1];
+  const value = /Could not convert string "([^"]*)"/i.exec(message)?.[1];
+  const column = /converting column "([^"]+)"/i.exec(message)?.[1];
+  const type = /to '([A-Z0-9_]+)'/i.exec(message)?.[1];
+  if (!line || value === undefined || !column) return null;
+  return `line ${Number(line).toLocaleString()} has "${value}" in ${column}, which does not fit the ${type ?? 'type'} guessed from the rows above it`;
+}
+
+/** Plain words for a date format, when day and month could be read either way round. */
+export function ambiguousDateFormat(format: string | null | undefined): string | null {
+  if (!format) return null;
+  const month = format.indexOf('%m');
+  const day = format.indexOf('%d');
+  const year = format.indexOf('%Y');
+  if (month === -1 || day === -1 || (year !== -1 && year < month && year < day)) return null;
+  return month < day ? 'month first (03/04/2026 is 4 March)' : 'day first (03/04/2026 is 3 April)';
+}
+
+/** The other order, for the statement that reloads a file with it. */
+export function swappedDateFormat(format: string): string {
+  return format.replace('%m', '\u0000').replace('%d', '%m').replace('\u0000', '%d');
+}
+
+/** How the values in a text column look, counted over a sample. */
+export interface TextColumnShape {
+  column: string;
+  nonNull: number;
+  /** `1,5` and `1.234,56`. */
+  decimalComma: number;
+  /** `1,234.56`. */
+  thousands: number;
+  /** `99.50`. */
+  plain: number;
+}
+
+/** The SQL that counts those shapes for each text column in one pass over a sample. */
+export function textShapeSql(table: string, columns: string[], sampleRows = 10000): string {
+  const parts = columns.flatMap((name, i) => {
+    const c = `"${quoteName(name)}"`;
+    return [
+      `count(${c}) AS n${i}`,
+      `count(*) FILTER (WHERE regexp_full_match(${c}, '-?[0-9]{1,3}([.][0-9]{3})*,[0-9]+|-?[0-9]+,[0-9]+')) AS dc${i}`,
+      `count(*) FILTER (WHERE regexp_full_match(${c}, '-?[0-9]{1,3}(,[0-9]{3})+([.][0-9]+)?')) AS th${i}`,
+      `count(*) FILTER (WHERE regexp_full_match(${c}, '-?[0-9]+([.][0-9]+)?')) AS pl${i}`,
+    ];
+  });
+  return `SELECT ${parts.join(', ')} FROM (SELECT * FROM "${quoteName(table)}" LIMIT ${sampleRows})`;
+}
+
+/** Read `textShapeSql`'s single row back into one shape per column. */
+export function readTextShapes(columns: string[], row: unknown[]): TextColumnShape[] {
+  return columns.map((column, i) => ({
+    column,
+    nonNull: Number(row[i * 4] ?? 0),
+    decimalComma: Number(row[i * 4 + 1] ?? 0),
+    thousands: Number(row[i * 4 + 2] ?? 0),
+    plain: Number(row[i * 4 + 3] ?? 0),
+  }));
+}
+
+/** Columns every one of whose values is a number written with a decimal comma. */
+export function decimalCommaColumns(shapes: TextColumnShape[]): string[] {
+  return shapes.filter((s) => s.nonNull > 0 && s.decimalComma === s.nonNull).map((s) => s.column);
+}
+
+/** Columns of numbers written with thousands separators, which were read as text. */
+export function thousandsColumns(shapes: TextColumnShape[]): string[] {
+  return shapes
+    .filter((s) => s.thousands > 0 && s.thousands + s.plain >= s.nonNull * 0.9)
+    .map((s) => s.column);
+}
+
+/* -------------------------------------------------- showing values faithfully */
+
+/**
+ * Column types whose values are shown as DuckDB's own text rather than converted in
+ * JavaScript.
+ *
+ * Arrow hands these over in a form that loses something on the way: timestamps
+ * arrive as milliseconds and drop their microseconds, TIME as a raw microsecond
+ * count, INTERVAL garbled, and lists and structs as JSON with every decimal unscaled
+ * and every date an epoch number. DuckDB's own cast to text gets all of them right.
+ */
+const SHOWN_AS_TEXT = /^(?:TIMESTAMP|TIME\b|TIMETZ|INTERVAL|STRUCT|MAP|UNION|BIT$)|\[\d*\]$/i;
+
+export function textDisplayColumns(described: [name: string, type: string][]): string[] {
+  const names = described.map(([name]) => name);
+  // SELECT * REPLACE needs every name to be unique; with duplicates, leave it alone.
+  if (new Set(names).size !== names.length) return [];
+  return described.filter(([, type]) => SHOWN_AS_TEXT.test(type.trim())).map(([name]) => name);
+}
+
+/** Statements that only read, and so can be described and wrapped for display. */
+export function isReadOnlyQuery(sql: string): boolean {
+  return /^\s*(?:\(\s*)*(?:SELECT|WITH|FROM|VALUES|TABLE|PIVOT|UNPIVOT)\b/i.test(sql);
+}
+
+/** The query with the given columns cast to text, everything else untouched. */
+export function textDisplaySql(sql: string, columns: string[]): string {
+  const casts = columns.map((c) => `CAST("${quoteName(c)}" AS VARCHAR) AS "${quoteName(c)}"`);
+  return `SELECT * REPLACE (${casts.join(', ')}) FROM (${stripTrailingSemicolon(sql)}) AS sqlparity_display`;
+}
+
+/**
+ * The loaded table the query reads, so its columns can be suggested bare.
+ *
+ * With one table loaded that is obvious. With several, the editor would otherwise
+ * only suggest a column after `table.`, which nobody types when writing `WHERE`.
+ */
+export function referencedTable(sql: string, tables: readonly LoadedTable[]): string | undefined {
+  const loaded = new Map(tables.map((t) => [t.table.toLowerCase(), t.table]));
+  for (const m of sql.matchAll(/\b(?:FROM|JOIN)\s+"?([A-Za-z_][\w]*)"?/gi)) {
+    const found = loaded.get(m[1]!.toLowerCase());
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /**
@@ -181,11 +321,13 @@ export function csvHeaderWarning(kind: FileKind, columns: string[]): string | nu
  * of being pasted as real whitespace.
  */
 export function toTsv(columns: string[], rows: unknown[][]): string {
+  // NULL is \N, as in PostgreSQL's COPY text format, whose escaping this follows.
+  // Writing it as the word NULL made it indistinguishable from a string 'NULL' —
+  // exactly the kind of value a migration check needs to tell apart.
   const cell = (value: unknown) =>
-    formatCell(value)
-      .replaceAll('\\', '\\\\')
-      .replaceAll('\t', '\\t')
-      .replaceAll('\n', '\\n');
+    isNullCell(value)
+      ? '\\N'
+      : formatCell(value).replaceAll('\\', '\\\\').replaceAll('\t', '\\t').replaceAll('\n', '\\n');
   return [columns.join('\t'), ...rows.map((row) => row.map(cell).join('\t'))].join('\n');
 }
 
