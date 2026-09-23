@@ -137,4 +137,118 @@ describe('SELECT * variants', () => {
       'select-star',
     );
   });
+
+  it('flags t.*, which reads every column of t', () => {
+    expect(rules("SELECT o.* FROM orders o WHERE o.dt = '2026-01-01'")).toContain('select-star');
+  });
+
+  it('does not flag SELECT * inside EXISTS, which reads no columns', () => {
+    expect(
+      rules("SELECT id FROM a WHERE EXISTS (SELECT * FROM b WHERE b.id = a.id) AND a.dt = '2026-01-01'"),
+    ).not.toContain('select-star');
+  });
+
+  it('does not flag count(*)', () => {
+    expect(rules('SELECT count(*) FROM t WHERE x = 1')).not.toContain('select-star');
+  });
+});
+
+describe('real queries, read by their structure', () => {
+  it('does not treat ORDER BY inside a window function as the query sorting', () => {
+    const dedupe = `SELECT id, name FROM (
+      SELECT id, name, row_number() OVER (PARTITION BY id ORDER BY updated_at DESC) AS rn
+      FROM customers WHERE dt = '2026-01-01') x
+    WHERE rn = 1`;
+    expect(rules(dedupe)).not.toContain('order-by-no-limit');
+  });
+
+  it('does not treat ORDER BY inside an aggregate as the query sorting', () => {
+    expect(
+      rules("SELECT id, string_agg(name, ',' ORDER BY name) FROM t WHERE dt = '2026-01-01' GROUP BY id"),
+    ).not.toContain('order-by-no-limit');
+  });
+
+  it('does not read a UNION of two filtered selects as a comma join', () => {
+    expect(rules('SELECT a, b FROM t1 WHERE x = 1 UNION ALL SELECT a, b FROM t2 WHERE x = 2')).not.toContain(
+      'comma-join',
+    );
+  });
+
+  it('does not read UNNEST after a comma as a join', () => {
+    expect(rules('SELECT t.id, u.tag FROM t, UNNEST(t.tags) AS u(tag) WHERE t.x = 1')).not.toContain(
+      'comma-join',
+    );
+  });
+
+  it('flags a comma join even with no WHERE at all', () => {
+    expect(rules('SELECT a FROM t, u')).toContain('comma-join');
+  });
+
+  it('sees a function around a quoted column name', () => {
+    expect(rules(`SELECT "id" FROM "db"."orders" WHERE date("created_at") = DATE '2026-01-01'`)).toContain(
+      'function-on-filtered-column',
+    );
+  });
+
+  it('sees a function around a column in either argument position', () => {
+    expect(rules("SELECT id FROM t WHERE date_trunc('day', ts) = DATE '2026-01-01'")).toContain(
+      'function-on-filtered-column',
+    );
+  });
+
+  it('sees it inside brackets and next to BETWEEN', () => {
+    expect(rules("SELECT id FROM t WHERE (x = 1 OR year(d) = 2026)")).toContain('function-on-filtered-column');
+    expect(rules("SELECT id FROM t WHERE date(ts) BETWEEN DATE '2026-01-01' AND DATE '2026-01-31'")).toContain(
+      'function-on-filtered-column',
+    );
+  });
+
+  it('does not flag two columns compared through the same function', () => {
+    const check = `SELECT a.customer_id FROM input_db a JOIN output_db b ON a.customer_id = b.customer_id
+      WHERE coalesce(a.segment, '~') <> coalesce(b.segment, '~') LIMIT 10`;
+    expect(rules(check)).not.toContain('function-on-filtered-column');
+  });
+
+  it('does not flag a function applied to the constant side', () => {
+    expect(rules("SELECT id FROM t WHERE dt = cast('2026-01-01' AS date)")).not.toContain(
+      'function-on-filtered-column',
+    );
+  });
+
+  it('flags ILIKE with a leading wildcard', () => {
+    expect(reviewSql("SELECT id FROM t WHERE name ILIKE '%acme%'", getDialect('postgresql')).map((f) => f.rule)).toContain(
+      'leading-wildcard-like',
+    );
+  });
+
+  it('flags an unfiltered table even when a CTE has a WHERE', () => {
+    expect(
+      rules(`WITH recent AS (SELECT id FROM small WHERE dt = '2026-01-01')
+        SELECT r.id, e.payload FROM recent r JOIN events e ON e.id = r.id`),
+    ).toContain('no-filter');
+  });
+
+  it('does not ask for a WHERE when only a CTE is read', () => {
+    expect(rules(`WITH recent AS (SELECT id FROM small WHERE dt = '2026-01-01') SELECT id FROM recent`)).not.toContain(
+      'no-filter',
+    );
+  });
+
+  it('reads Hive double-quoted strings as strings', () => {
+    const hive = getDialect('hive');
+    expect(
+      reviewSql(`SELECT id FROM t WHERE name = "O'Brien" AND dt = '2026-01-01'`, hive).map((f) => f.rule),
+    ).toEqual([]);
+  });
+
+  it('stays fast on a large pasted file', () => {
+    const many = Array.from(
+      { length: 400 },
+      (_, i) =>
+        `SELECT 'col_${i}' AS field, count(*) AS mismatches FROM input_db a JOIN output_db b ON a.id = b.id WHERE coalesce(a.col_${i}, '~') <> coalesce(b.col_${i}, '~')`,
+    ).join(';\n');
+    const started = performance.now();
+    reviewSql(many, trino);
+    expect(performance.now() - started).toBeLessThan(1500);
+  });
 });
