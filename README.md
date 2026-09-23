@@ -81,6 +81,19 @@ drops rows that do not fit and names the rest `column0`, `column1`. Both tells a
 [`lib/scratchpad.ts`](lib/scratchpad.ts) and reported, because a table that loads successfully
 while missing rows is the exact failure this project exists to refuse.
 
+Real exports need more than that, and [`loadTable`](lib/duckdb.ts) handles what they bring:
+
+- **A late value that does not fit.** DuckDB guesses types from a sample, so `N/A` on line
+  30,002 of a numeric column failed the whole load. The file is re-read with every row used to
+  settle the types, and the note names the line, the value and the column.
+- **European numbers.** A column that is all `1,5`-style values in a semicolon-separated file is
+  reloaded with a comma as the decimal point. Thousands separators (`1,234.56`) stay text, with
+  the cast to use.
+- **Ambiguous dates.** When `03/04/2026` could be either day or month first, the note says which
+  was assumed and gives the statement that reloads the file the other way round.
+- **One bad file in a batch.** Each file loads on its own, so a failure is reported next to the
+  file list and the others still arrive — and still appear in it.
+
 ### The result grid
 
 `Ctrl`/`Cmd`+`Enter` runs the query. That is bound inside CodeMirror rather than on the window,
@@ -93,7 +106,8 @@ twice.
 Rows are numbered, and the number column pins to the left edge: knowing which row you are looking
 at matters most when a wide result has been scrolled sideways. It is a display aid rather than
 part of the result, so **Copy as TSV** gives the columns the query actually returned and no
-phantom index column.
+phantom index column. It follows PostgreSQL's COPY text format, which its escaping already did:
+a NULL is `\N`, so it cannot be mistaken for the text `NULL` or for an empty string.
 
 Two different caps, which are easy to confuse:
 
@@ -127,11 +141,19 @@ means fewer of them.
 CSV has no NULL, so an unquoted empty field is null and a quoted one is the empty string — the
 convention PostgreSQL's own CSV export uses. Lines end LF on both paths.
 
-Values are converted on the way out of Arrow, where the column type is still known, because three
-types arrive in a shape that is wrong to print. A `DECIMAL` comes through as its unscaled integer,
-so `1.005` would render as `1005`; `DATE` and `TIMESTAMP` arrive as epoch milliseconds and would
-render as thirteen-digit integers. The conversion keys on the Arrow format's numeric type ids
-rather than class names, which a production build is free to mangle.
+Values are converted on the way out of Arrow, where the column type is still known, because
+several types arrive in a shape that is wrong to print. A `DECIMAL` comes through as its unscaled
+integer, so `1.005` would render as `1005`; a `DATE` arrives as epoch milliseconds. The conversion
+keys on the Arrow format's numeric type ids rather than class names, which a production build is
+free to mangle.
+
+Some types cannot be repaired that way, because something is already lost when they reach
+JavaScript: a `TIMESTAMP` loses its microseconds, `TIME` is a raw microsecond count, `INTERVAL` is
+garbled, and a list or struct arrives with every decimal unscaled and every date an epoch number.
+For those, the query is described first — `DESCRIBE` plans it without running it — and the
+affected columns are cast to text inside DuckDB with `SELECT * REPLACE (…)`, which gets every one of
+them right. Only read-only statements are wrapped, and a result with duplicate column names is left
+as it is.
 
 ### Completion
 
@@ -190,13 +212,26 @@ and the two documents involved are never textually equal even when the answer is
     what you send   { "mappings": { "properties": { … } }, "settings": { … } }
     what you get    { "my_index": { "aliases": {}, "mappings": { … }, "settings": { … } } }
 
-Three things would otherwise be reported as differences when they are not. The response wraps
-everything in the index name, so that is unwrapped and the name kept. Elasticsearch does not
-preserve key order inside a field definition, so attributes are compared by value through a
-key-sorted encoding. And the cluster writes four settings of its own — `uuid`, `creation_date`,
-`provided_name`, `version.created` — which cannot appear in the mapping you sent; they sit in the
-same list as everything else but are labelled as the cluster's own and never counted, because four
-false differences on every check trains you to skim the list.
+Everything the cluster does to a request on the way in is undone before comparing, because each
+would otherwise be reported as a difference in an index that is exactly what was asked for:
+
+- The response wraps everything in the index name, so that is unwrapped and the name kept.
+- Key order inside a field definition is not preserved, so attributes are compared by value
+  through a key-sorted encoding.
+- Settings are filed under `index.`, so a request's `number_of_shards` is compared with the
+  answer's `index.number_of_shards` — and `5` with `"5"`, since values come back as strings.
+- A parameter set to its default (`"index": true`, a date's default `format`) is left out of the
+  answer, so absent and default compare equal.
+- A dotted field name, `"geo.country"`, comes back as an object `geo` holding `country`.
+- The cluster writes settings of its own — `uuid`, `creation_date`, `provided_name`,
+  `version.created`, and `_tier_preference` since 7.10. They sit in the same list but are
+  labelled as the cluster's and never counted.
+
+The mapping's own parameters — `dynamic`, `_source`, `dynamic_templates` and the rest — are compared
+alongside the settings, since `dynamic` quietly loosening from `strict` to `true` is one of the
+changes worth catching. A copy out of Kibana's Dev Tools, with its `PUT my_index` line and `//`
+comments, is read as it is, as are Elasticsearch 6 mappings with a type name and index
+templates.
 
 Both boxes are editors with line gutters, and every difference is tinted on the line it occurs —
 green for added, red for removed, amber for a changed type or setting. The table names the line
@@ -220,6 +255,25 @@ type-only comparison and behaves differently at query time. Nested objects flatt
 paths, keeping the parent so an `object` that became a string is still visible, and multi-fields
 appear under the name you would query them by.
 
+### Reading CREATE TABLE
+
+[`lib/ddl.ts`](lib/ddl.ts) is a purpose-built reader rather than a grammar. The grammars it
+replaced each knew one dialect, so real DDL from anywhere else — `timestamp(6)` in Athena, `ENCODE
+az64` in Redshift, `[nvarchar](max)` from SQL Server, `VARCHAR2(20 BYTE)` from Oracle — stopped the
+parse part-way and silently dropped every column after it, which the schema diff then reported as
+removed. The reader only needs brackets, quotes and commas: the column list is the first bracketed
+group after the table name, columns are split at commas outside brackets (so a
+`struct<city:string,zip:string>` stays one column), and a column's type runs until the first
+option keyword. Backticks, brackets and double quotes are removed from names, so `SHOW CREATE
+TABLE` output compares equal to the same table written by hand.
+
+The schema diff compares types as they mean rather than as they are spelled — `decimal(18, 2)`
+and `decimal(18,2)`, `int` and `integer` are the same — and reports changes to `NOT NULL`,
+`DEFAULT`, collation and partitioning, and columns that moved: an Athena table over CSV or ORC
+reads columns by position, so a swap in the DDL silently swaps the data. If any part of a
+statement cannot be read, the side says which line, and the result says a removed column may
+simply have been skipped.
+
 Mixing the two formats is refused rather than guessed. Comparing `keyword` against `varchar` means
 deciding they are equivalent, which is a judgement about the data rather than a fact about the
 schemas — the same refusal the dialect converter makes.
@@ -231,7 +285,12 @@ reasonable product and not one this codebase can have, so both are rule-based �
 deliberately narrow about it.
 
 [`lib/review.ts`](lib/review.ts) checks nine long-established anti-patterns, each carrying the
-reason it costs something and a concrete fix. It cannot rank two queries by speed: without table
+reason it costs something and a concrete fix. Each check reads the query's structure — which
+SELECT a clause belongs to, what sits inside brackets — rather than searching the flat text, so an
+`ORDER BY` inside `OVER (…)` is not a sort, `SELECT *` inside `EXISTS` reads no columns, and a
+`WHERE` inside a CTE does not excuse an unfiltered table outside it. A function around a column
+only counts when the other side is a constant: two tables' columns compared through the same
+`coalesce` is the generator's own check, not a missed index. It cannot rank two queries by speed: without table
 statistics, partition layout or indexes, nothing in the browser knows which is faster. The tool
 says so on the page rather than implying otherwise.
 
@@ -243,6 +302,13 @@ exists in several dialects with different units. Renaming those yields SQL that 
 wrong rows, which is worse than SQL that fails — so they are reported as unconverted, with the
 reason, and `convertSql` returns that list alongside the query.
 
+The same list carries the differences that change an answer without any error at all: `7 / 2` is 3
+in Trino and 3.5 in MySQL, `||` means OR in MySQL, and `arr[1]` is the first element in Trino but
+the second in BigQuery. Row caps are converted where they stand, against the SELECT at their own
+nesting level, so a top-5 subquery keeps its limit. In MySQL, Hive, Spark and BigQuery a
+double-quoted value is a string, and it is written single-quoted for engines where it would be a
+column name.
+
 ### Typed variables
 
 Template variables have three kinds:
@@ -251,14 +317,23 @@ Template variables have three kinds:
 - **bulk** — iterates the pasted list (`{{field}}`)
 - **typed** — resolved from each row's data type through a per-dialect map (`{{null_default}}`)
 
-So `coalesce(a.{{field}}, {{null_default}})` produces `'1'` for a `varchar`, `-1` for a `bigint`,
+So `coalesce(a.{{field}}, {{null_default}})` produces `'~'` for a `varchar`, `-1` for a `bigint`,
 and `TIMESTAMP '1900-01-01 00:00:00'` for a `timestamp`. The map is per dialect because Athena
 needs the `TIMESTAMP` prefix and MySQL does not. Defaults live in [`lib/typemap.ts`](lib/typemap.ts)
 and can be overridden globally.
 
-A data type with no map entry **blocks generation** rather than falling back to a default. Emitting
-a plausible sentinel for an unknown type would produce a query that runs cleanly and reports the
-wrong answer, which is the worst outcome for a correctness tool.
+A column whose type has no map entry is **left out, and named**, rather than given a default.
+Emitting a plausible sentinel for an unknown type would produce a query that runs cleanly and
+reports the wrong answer, which is the worst outcome for a correctness tool — but one `array`
+column should not stop the other 399 either. Arrays, maps, structs and JSON have no safe stand-in
+at all; the message points at the null-safe preset, which checks them correctly.
+
+The presets are built per dialect from the three things that genuinely differ: the null-safe
+comparison (`IS DISTINCT FROM`, `<=>`, or spelled out for SQL Server, Oracle and ClickHouse), how
+rows are capped (`LIMIT`, `TOP`, `FETCH FIRST`), and whether a query with no table needs `FROM
+dual`. Conditional counts use `count(CASE WHEN … THEN 1 END)`, which every engine has; `count_if`
+does not exist in PostgreSQL. Variables that hold column or table names are quoted where a name
+needs it — `order`, `Customer Name` — and written plainly inside string literals.
 
 ### Token-aware replacement
 
@@ -286,7 +361,7 @@ pointer to the `.sql` download for the full text.
 | `@codemirror/*` | Editor, with SQL keyword and schema completion (~112 KB gz against Monaco's ~937 KB) |
 | `write-excel-file` | `.xlsx` export (~19 KB gz) |
 | `fflate` | Zip for the numbered `.sql` set |
-| `dt-sql-parser` | ANTLR grammars behind DDL parsing and syntax validation |
+| `dt-sql-parser` | ANTLR grammars behind query syntax checking (not DDL reading, which is `lib/ddl.ts`) |
 | `@duckdb/duckdb-wasm` | The scratchpad engine; lazy-loaded on that route only |
 
 ## Not built yet
@@ -311,6 +386,6 @@ for a correctness tool.
 - **Renaming functions whose arguments differ in order.** `CHARINDEX` against `STRPOS`, or
   `DATEDIFF` across dialects, would produce SQL that runs and returns the wrong rows.
   Reported as unconverted instead.
-- **A data-type fallback for unknown types.** Generation blocks rather than emitting a
-  plausible sentinel.
+- **A data-type fallback for unknown types.** Those columns are left out and named rather than
+  given a plausible sentinel.
 
