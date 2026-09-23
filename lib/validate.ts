@@ -8,8 +8,8 @@
  * valid Snowflake syntax as broken, say — validation is simply unavailable for them.
  * `supportsValidation` lets the UI say so honestly instead of silently doing nothing.
  *
- * Athena/Trino is treated as Trino specifically, not Hive: see lib/ddl-parsers.ts for
- * why the two need different grammars for the same dialect.
+ * Athena/Trino is validated with the Trino grammar: its queries are real Trino, even
+ * though its CREATE TABLE statements are Hive-flavoured DDL.
  */
 
 export interface SyntaxError {

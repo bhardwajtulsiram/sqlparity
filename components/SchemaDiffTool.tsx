@@ -72,7 +72,7 @@ const ES_AFTER = `{
   }
 }`;
 
-type ChangeKind = 'added' | 'removed' | 'retyped' | 'attributes' | 'unchanged';
+type ChangeKind = 'added' | 'removed' | 'retyped' | 'attributes' | 'moved' | 'unchanged';
 
 interface Change {
   name: string;
@@ -108,6 +108,7 @@ const STATUS_STYLE: Record<RowKind, string> = {
   removed: 'bg-red-50 text-red-900 dark:bg-red-950/30 dark:text-red-300',
   retyped: 'bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
   attributes: 'bg-accent-500/15 text-accent-700 dark:text-accent-400',
+  moved: 'bg-accent-500/15 text-accent-700 dark:text-accent-400',
   setting: 'bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
   generated: 'text-ink-500 dark:text-ink-400',
   unchanged: 'text-ink-500 dark:text-ink-400',
@@ -118,6 +119,7 @@ const STATUS_LABEL: Record<RowKind, string> = {
   removed: 'Removed',
   retyped: 'Type changed',
   attributes: 'Settings changed',
+  moved: 'Position changed',
   setting: 'Setting changed',
   generated: 'Written by the cluster',
   unchanged: 'Unchanged',
@@ -129,9 +131,10 @@ const ROW_ORDER: Record<RowKind, number> = {
   retyped: 1,
   attributes: 2,
   added: 3,
-  setting: 4,
-  unchanged: 5,
-  generated: 6,
+  moved: 4,
+  setting: 5,
+  unchanged: 6,
+  generated: 7,
 };
 
 type Format = 'sql' | 'es' | 'unknown';
@@ -146,6 +149,8 @@ interface Side {
   settingLines: Record<string, number>;
   index?: string;
   error?: string;
+  /** Parts that could not be read. The side is usable, but may be missing columns. */
+  problems?: string[];
 }
 
 const EMPTY: Side = {
@@ -230,6 +235,7 @@ export function SchemaDiffTool() {
       removed: 0,
       retyped: 0,
       attributes: 0,
+      moved: 0,
       setting: 0,
       generated: 0,
       unchanged: 0,
@@ -344,6 +350,7 @@ export function SchemaDiffTool() {
                   counts.removed > 0 && `${counts.removed} removed`,
                   counts.retyped > 0 && `${counts.retyped} retyped`,
                   counts.attributes > 0 && `${counts.attributes} reconfigured`,
+                  counts.moved > 0 && `${counts.moved} moved`,
                   counts.setting > 0 && `${counts.setting} setting${counts.setting === 1 ? '' : 's'}`,
                 ]
                   .filter(Boolean)
@@ -374,6 +381,17 @@ export function SchemaDiffTool() {
           </>
         }
       >
+        {!mismatched && rows && (before.problems?.length || after.problems?.length) ? (
+          <div className="mb-4">
+            <Note tone="warn">
+              Part of the {before.problems?.length ? 'Before' : 'After'}
+              {before.problems?.length && after.problems?.length ? ' and After schemas' : ' schema'}{' '}
+              could not be read, so a column shown as removed or added may simply have been
+              skipped. Fix the lines named under the box first.
+            </Note>
+          </div>
+        ) : null}
+
         {mismatched ? (
           <Note tone="warn">
             One side is a <code className="font-mono">CREATE TABLE</code> and the other is an
@@ -500,7 +518,17 @@ function useSide(text: string, dialectId: string, set: (side: Side) => void) {
             });
             return;
           }
-          set({ ...EMPTY, state: 'ready', format: 'sql', columns: r.columns });
+          const problems = [
+            ...r.errors.map((e) => `Line ${e.line}: ${e.message}`),
+            ...(r.notes ?? []),
+          ];
+          set({
+            ...EMPTY,
+            state: 'ready',
+            format: 'sql',
+            columns: r.columns,
+            ...(problems.length > 0 ? { problems } : {}),
+          });
         })
         .catch(() => {
           if (!cancelled) set({ ...EMPTY, state: 'error', format: 'sql' });
@@ -589,6 +617,18 @@ function SchemaPane({
             ? `${side.fields.length} field${side.fields.length === 1 ? '' : 's'}${side.index ? ` in ${side.index}` : ''}`
             : `${side.columns.length} column${side.columns.length === 1 ? '' : 's'}`}
         </p>
+      )}
+
+      {side.state === 'ready' && side.problems && side.problems.length > 0 && (
+        <div className="mt-3">
+          <Note tone="warn">
+            <ul className="space-y-1">
+              {side.problems.slice(0, 4).map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          </Note>
+        </div>
       )}
 
       {side.state === 'error' && (
