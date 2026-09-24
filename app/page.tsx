@@ -155,12 +155,10 @@ export default function Home() {
     <div className="space-y-20 pb-10">
       <section className="pt-2 lg:pt-4">
         {/* The grid leads because it is the part that says what the product does. The
-            claim still gets the h1 — a page whose first heading names its tools but not
-            its point orients nobody who arrived from a search. */}
-        <h1 className="text-3xl leading-[1.1] font-semibold tracking-tight text-balance sm:text-4xl">
-          Seven SQL tools that never see your data
-        </h1>
-        <p className="mt-3 max-w-2xl text-lg leading-relaxed text-ink-600 dark:text-ink-300">
+            page keeps an h1 for screen readers and search results, but not on screen:
+            a visible headline counting the tools read as a sales line. */}
+        <h1 className="sr-only">SQLParity — SQL tools that run in your browser</h1>
+        <p className="max-w-2xl text-lg leading-relaxed text-ink-600 dark:text-ink-300">
           Built around one job: proving a migration copied every column correctly, without handing
           your table definitions to anyone. Everything runs in this tab.
         </p>
