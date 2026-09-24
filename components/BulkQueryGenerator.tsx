@@ -37,6 +37,8 @@ import {
 import { downloadExcel, downloadNumberedSet, downloadSqlFile } from '@/lib/export';
 import { usePersistentState } from '@/lib/settings';
 import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
+import { ToolHeader } from '@/components/ToolHeader';
+import { DownloadIcon } from '@/components/icons';
 import {
   Button,
   ColumnBox,
@@ -666,44 +668,50 @@ export function BulkQueryGenerator() {
 
   return (
     <div className="space-y-5">
-      {/* Title and the two top-level choices share one band. The page's most valuable
-          space should carry controls, not a restatement of the page name. */}
-      <div className="rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
-          <div className="mr-auto">
-            <h1 className="text-xl font-semibold tracking-tight">Bulk query generator</h1>
-            <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-              Paste a <code className="font-mono">CREATE TABLE</code> or a list of fields — get one
-              query per column.
-            </p>
-          </div>
-          <div className="w-72">
-            <Field label="Check">
-              <Select value={presetId} onChange={setPresetId}>
-                {PRESETS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <div className="w-52">
-            <DialectSelect value={dialectId} onChange={setDialectId} label="Write SQL for" />
-          </div>
+      {/* The two top-level choices share the toolbar; the preset's explanation sits
+          beneath them, where it reads as describing the choice just made. */}
+      <ToolHeader
+        href="/bulk-query-generator/"
+        description={
+          <>
+            Paste a <code className="font-mono text-[13px]">CREATE TABLE</code> or a list of
+            fields and get one validation query per column, with the right null placeholder for
+            each data type.
+          </>
+        }
+        footer={
+          preset?.summary || preset?.detail || (preset && presetUnavailable(preset, dialectId)) ? (
+            <div className="space-y-3">
+              {(preset?.summary || preset?.detail) && (
+                <p className="text-[13px] leading-relaxed text-ink-500 dark:text-ink-400">
+                  <span className="font-medium text-ink-800 dark:text-ink-200">
+                    {preset?.summary}
+                  </span>{' '}
+                  {preset?.detail}
+                </p>
+              )}
+              {preset && presetUnavailable(preset, dialectId) && (
+                <Note tone="warn">{presetUnavailable(preset, dialectId)}</Note>
+              )}
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="w-full sm:w-80">
+          <Field label="Check">
+            <Select value={presetId} onChange={setPresetId}>
+              {PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </div>
-        {(preset?.summary || preset?.detail) && (
-          <p className="mt-3 border-t border-[var(--border-card)] pt-3 text-[13px] leading-relaxed text-ink-500 dark:text-ink-400">
-            <span className="text-ink-700 dark:text-ink-300">{preset?.summary}</span>{' '}
-            {preset?.detail}
-          </p>
-        )}
-        {preset && presetUnavailable(preset, dialectId) && (
-          <div className="mt-3">
-            <Note tone="warn">{presetUnavailable(preset, dialectId)}</Note>
-          </div>
-        )}
-      </div>
+        <div className="w-full sm:w-56">
+          <DialectSelect value={dialectId} onChange={setDialectId} label="Write SQL for" />
+        </div>
+      </ToolHeader>
 
       {/* Setup on the left, results on the right and pinned, so the queries stay in
           view while the inputs above them change. */}
@@ -1290,13 +1298,13 @@ export function BulkQueryGenerator() {
               </Button>
             )}
             <CopyButton text={allSql} label="Copy all" variant="primary" />
-            <Button onClick={() => runExport('sql')} disabled={!result.queries.length}>
+            <Button icon={<DownloadIcon />} onClick={() => runExport('sql')} disabled={!result.queries.length}>
               .sql
             </Button>
-            <Button onClick={() => runExport('zip')} disabled={!result.queries.length}>
+            <Button icon={<DownloadIcon />} onClick={() => runExport('zip')} disabled={!result.queries.length}>
               .zip
             </Button>
-            <Button onClick={() => runExport('xlsx')} disabled={!result.queries.length}>
+            <Button icon={<DownloadIcon />} onClick={() => runExport('xlsx')} disabled={!result.queries.length}>
               Excel
             </Button>
           </>

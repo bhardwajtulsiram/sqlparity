@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import './globals.css';
+import { SiteFooter } from '@/components/SiteFooter';
 import { SiteHeader } from '@/components/SiteHeader';
 import { StorageBanner } from '@/components/StorageBanner';
 
@@ -97,16 +98,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         but is not enforced is worse than none, because you stop looking.
       */}
       <meta httpEquiv="Content-Security-Policy" content={CONTENT_SECURITY_POLICY} />
-      <body className="min-h-screen antialiased">
+      <body className="relative flex min-h-screen flex-col antialiased">
+        <div aria-hidden="true" className="page-backdrop" />
         <SiteHeader />
         <StorageBanner />
-        <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">{children}</main>
-        <footer className="mx-auto w-full max-w-7xl px-4 pb-10 text-xs text-ink-500 sm:px-6 dark:text-ink-400">
-          <p>
-            SQLParity runs entirely in your browser. No account, no server, no upload — the values
-            you paste never leave this machine.
-          </p>
-        </footer>
+        <main className="relative z-10 mx-auto w-full max-w-7xl flex-1 px-4 pt-8 pb-4 sm:px-6 sm:pt-10">
+          {children}
+        </main>
+        <SiteFooter />
       </body>
     </html>
   );

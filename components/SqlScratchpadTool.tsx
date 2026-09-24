@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
 import { Button, CopyButton, Note, Panel } from '@/components/ui';
+import { ToolHeader } from '@/components/ToolHeader';
+import { PlayIcon, UploadIcon } from '@/components/icons';
 import {
   completionSchema,
   csvHeaderWarning,
@@ -273,20 +275,24 @@ export function SqlScratchpadTool() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">SQL scratchpad</h1>
-          <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-            Query a CSV or Parquet file with real SQL. The engine runs in this tab.
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          <EngineBadge state={engine} />
-          <Button variant="primary" onClick={run} disabled={busy || sql.trim() === ''}>
-            {busy ? 'Working…' : 'Run'}
-          </Button>
-        </div>
-      </div>
+      <ToolHeader
+        href="/scratchpad/"
+        description="Query a CSV, Parquet or JSON file with real SQL. DuckDB runs inside this tab, so the file is never uploaded."
+        status={
+          <>
+            <EngineBadge state={engine} />
+            <Button
+              variant="primary"
+              icon={<PlayIcon />}
+              onClick={run}
+              disabled={busy || sql.trim() === ''}
+              title="Run the query (Ctrl+Enter)"
+            >
+              {busy ? 'Working…' : 'Run'}
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
         <Panel step={1} title="Your data">
@@ -304,7 +310,7 @@ export function SqlScratchpadTool() {
             className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-7 text-center transition-colors ${
               dragging
                 ? 'border-accent-500 bg-accent-500/10'
-                : 'border-[var(--border-card)] hover:border-accent-500'
+                : 'border-[var(--border-strong)] bg-[var(--surface-sunken)] hover:border-accent-500 hover:bg-accent-500/[0.04]'
             }`}
           >
             <input
@@ -317,6 +323,15 @@ export function SqlScratchpadTool() {
                 e.target.value = '';
               }}
             />
+            <span
+              className={`mb-3 flex size-10 items-center justify-center rounded-xl border transition-colors ${
+                dragging
+                  ? 'border-accent-500/40 bg-accent-500/15 text-accent-600 dark:text-accent-400'
+                  : 'border-[var(--border-card)] bg-[var(--surface-card)] text-ink-500 shadow-[var(--shadow-control)] dark:text-ink-400'
+              }`}
+            >
+              <UploadIcon className="size-5" />
+            </span>
             <span className="text-[13px] font-medium">Drop a file, or click to choose</span>
             <span className="mt-1 text-xs text-ink-500 dark:text-ink-400">
               CSV, TSV, Parquet or JSON
@@ -328,7 +343,7 @@ export function SqlScratchpadTool() {
               {files.map((file) => (
                 <li
                   key={file.table}
-                  className="rounded-lg bg-[var(--surface-sunken)] px-3.5 py-3 text-[13px]"
+                  className="rounded-lg border border-[var(--border-card)] bg-[var(--surface-header)] px-3.5 py-3 text-[13px]"
                 >
                   <div className="flex items-baseline gap-2">
                     <code className="font-mono font-semibold">{file.table}</code>
@@ -456,7 +471,7 @@ function EngineBadge({ state }: { state: EngineState }) {
   }[state];
 
   return (
-    <span className="flex items-center gap-2 font-mono text-xs text-ink-500 dark:text-ink-400">
+    <span className="flex h-8 items-center gap-2 rounded-lg border border-[var(--border-card)] bg-[var(--surface-card)] px-3 font-mono text-xs text-ink-600 shadow-[var(--shadow-control)] dark:text-ink-300">
       <span aria-hidden="true" className={`size-1.5 rounded-full ${map.dot}`} />
       {map.label}
     </span>

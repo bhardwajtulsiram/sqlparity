@@ -12,7 +12,8 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
 import { json } from '@codemirror/lang-json';
 import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
 import {
@@ -93,44 +94,95 @@ const highlightField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-const theme = EditorView.theme({
-  '&': { fontSize: '13px', backgroundColor: 'transparent' },
-  '.cm-content': { fontFamily: 'var(--font-mono)', padding: '10px 0' },
-  '.cm-gutters': {
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: 'color-mix(in oklab, currentColor 40%, transparent)',
+/*
+ * The editor is the code surface: dark and syntax-lit in both themes, like every other
+ * panel on the site that holds SQL. Colours come from the --syn-* tokens in
+ * globals.css, so a keyword in an editor is the same violet as a keyword in a static
+ * snippet on the home page — one scanner's idea of a token, drawn one way.
+ */
+const highlightStyle = HighlightStyle.define([
+  { tag: [t.keyword, t.operatorKeyword, t.modifier, t.controlKeyword], color: 'var(--syn-keyword)' },
+  { tag: [t.string, t.regexp], color: 'var(--syn-string)' },
+  { tag: [t.number, t.bool, t.null, t.atom], color: 'var(--syn-number)' },
+  { tag: [t.function(t.variableName), t.standard(t.name), t.typeName], color: 'var(--syn-function)' },
+  // lang-sql tags a "quoted identifier" as special(string). It must not share the string
+  // colour: telling those two apart is the distinction this product exists to get right.
+  { tag: [t.special(t.string), t.special(t.name), t.propertyName], color: 'var(--syn-identifier)' },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: 'var(--syn-comment)', fontStyle: 'italic' },
+  { tag: [t.operator, t.punctuation, t.bracket, t.separator], color: 'var(--syn-operator)' },
+  { tag: [t.name, t.variableName], color: 'var(--syn-plain)' },
+  { tag: t.invalid, color: 'oklch(0.72 0.18 25)' },
+]);
+
+const theme = EditorView.theme(
+  {
+    '&': { fontSize: '13px', backgroundColor: 'transparent', color: 'var(--syn-plain)' },
+    '.cm-content': {
+      fontFamily: 'var(--font-mono)',
+      padding: '12px 0',
+      caretColor: 'var(--syn-string)',
+    },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--syn-string)', borderLeftWidth: '2px' },
+    '.cm-gutters': {
+      backgroundColor: 'transparent',
+      border: 'none',
+      color: 'var(--code-gutter)',
+      paddingLeft: '4px',
+    },
+    '.cm-lineNumbers .cm-gutterElement': { padding: '0 10px 0 6px', minWidth: '28px' },
+    '.cm-activeLine': { backgroundColor: 'var(--code-active)' },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--syn-plain)' },
+    '&.cm-focused': { outline: 'none' },
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
+      { backgroundColor: 'var(--code-selection)' },
+    '.cm-scroller': { overflow: 'auto' },
+    '.cm-placeholder': { color: 'var(--syn-comment)', fontStyle: 'italic' },
+    '.cm-matchingBracket': {
+      backgroundColor: 'oklch(1 0 0 / 0.1)',
+      outline: '1px solid oklch(1 0 0 / 0.18)',
+    },
+    '.cm-diagnostic-error': { borderLeftColor: 'oklch(0.66 0.2 25)' },
+    '.cm-lintRange-error': {
+      backgroundImage: 'none',
+      textDecoration: 'underline wavy oklch(0.7 0.2 25)',
+      textDecorationSkipInk: 'none',
+    },
+    '.cm-tooltip': {
+      border: '1px solid var(--code-border)',
+      borderRadius: '8px',
+      backgroundColor: 'var(--code-header)',
+      color: 'var(--syn-plain)',
+      boxShadow: '0 12px 32px -10px oklch(0 0 0 / 0.6)',
+    },
+    '.cm-tooltip-lint': { overflow: 'hidden' },
+    '.cm-diagnostic': { padding: '6px 10px', fontSize: '12.5px' },
+    // Tinted the whole line width rather than just the text, with a bar in the gutter
+    // edge, so a difference is findable by scrolling past it rather than by reading.
+    '.cm-line.cm-diff-added': {
+      backgroundColor: 'oklch(0.72 0.15 155 / 0.16)',
+      boxShadow: 'inset 3px 0 0 oklch(0.75 0.15 155)',
+    },
+    '.cm-line.cm-diff-removed': {
+      backgroundColor: 'oklch(0.63 0.22 25 / 0.18)',
+      boxShadow: 'inset 3px 0 0 oklch(0.68 0.2 25)',
+    },
+    '.cm-line.cm-diff-changed': {
+      backgroundColor: 'oklch(0.78 0.15 80 / 0.16)',
+      boxShadow: 'inset 3px 0 0 oklch(0.8 0.15 80)',
+    },
+    '.cm-tooltip.cm-tooltip-autocomplete': { overflow: 'hidden' },
+    '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', fontSize: '12.5px' },
+    '.cm-tooltip-autocomplete > ul > li': { padding: '3px 10px' },
+    '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+      backgroundColor: 'var(--color-accent-600)',
+      color: '#fff',
+    },
+    '.cm-completionDetail': { marginLeft: '1rem', opacity: 0.6, fontStyle: 'normal' },
+    '.cm-completionMatchedText': { textDecoration: 'none', color: 'var(--syn-string)' },
+    'li[aria-selected] .cm-completionMatchedText': { color: '#fff' },
   },
-  '.cm-activeLine': { backgroundColor: 'color-mix(in oklab, currentColor 5%, transparent)' },
-  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
-  '&.cm-focused': { outline: 'none' },
-  '.cm-scroller': { overflow: 'auto' },
-  '.cm-diagnostic-error': { borderLeftColor: 'oklch(0.58 0.22 25)' },
-  '.cm-lintRange-error': {
-    backgroundImage: 'none',
-    textDecoration: 'underline wavy oklch(0.58 0.22 25)',
-    textDecorationSkipInk: 'none',
-  },
-  // Tinted the whole line width rather than just the text, so a difference is findable
-  // by scrolling past it rather than by reading.
-  '.cm-line.cm-diff-added': { backgroundColor: 'oklch(0.72 0.15 155 / 0.18)' },
-  '.cm-line.cm-diff-removed': { backgroundColor: 'oklch(0.63 0.22 25 / 0.16)' },
-  '.cm-line.cm-diff-changed': { backgroundColor: 'oklch(0.75 0.15 75 / 0.22)' },
-  '.cm-tooltip.cm-tooltip-autocomplete': {
-    border: '1px solid var(--border-card)',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    backgroundColor: 'var(--surface-card)',
-    boxShadow: 'var(--shadow-card)',
-  },
-  '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', fontSize: '12.5px' },
-  '.cm-tooltip-autocomplete > ul > li': { padding: '3px 10px' },
-  '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-    backgroundColor: 'var(--color-accent-600)',
-    color: '#fff',
-  },
-  '.cm-completionDetail': { marginLeft: '1rem', opacity: 0.6, fontStyle: 'normal' },
-});
+  { dark: true },
+);
 
 /**
  * Table and column names to offer, as table name -> column names.
@@ -296,7 +348,7 @@ export function SqlEditor({
       lineNumbers(),
       history(),
       highlightActiveLine(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      syntaxHighlighting(highlightStyle),
       languageSlot.current.of(
         language === 'json' ? json() : sqlSupport(dialectId, schema, defaultTable),
       ),
@@ -414,8 +466,14 @@ export function SqlEditor({
   return (
     <div
       ref={host}
-      style={{ minHeight }}
-      className="overflow-auto rounded-lg border border-[var(--border-card)] bg-[var(--surface-sunken)]"
+      style={{
+        minHeight,
+        background: 'var(--code-surface)',
+        borderColor: 'var(--code-border)',
+      }}
+      className={`overflow-auto rounded-lg border shadow-[inset_0_1px_0_oklch(1_0_0/0.04),0_1px_2px_oklch(0.2_0.02_265/0.12)] transition-shadow ${
+        readOnly ? '' : 'focus-within:shadow-[0_0_0_3px_oklch(0.62_0.17_250/0.3)]'
+      }`}
     />
   );
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { getDialect } from '@/lib/dialects';
 import { buildInList, DEFAULT_BUILD, splitValues } from '@/lib/inlist';
 import { Sql } from '@/components/Sql';
+import { useExternalRequestCount } from '@/lib/network';
 
 const STARTER = "O'Brien Holdings\nAcme, Inc.\n007\nMüller GmbH";
 
@@ -60,48 +61,6 @@ function useTypedIn(full: string) {
   return { text, setText, typing, stopTyping: () => setTyping(false) };
 }
 
-/**
- * Counts requests this page has made to any other origin, live.
- *
- * The privacy claim is the product, and a reading is worth more than a claim. This
- * watches the browser's own resource timeline — including everything already loaded,
- * via `buffered` — and reports anything whose origin is not this one. It is a real
- * measurement: were the number ever not zero, it would say so.
- */
-function useExternalRequestCount() {
-  const [count, setCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (typeof PerformanceObserver === 'undefined') return;
-
-    const isExternal = (entry: PerformanceEntry) => {
-      try {
-        return new URL(entry.name, window.location.href).origin !== window.location.origin;
-      } catch {
-        return false;
-      }
-    };
-
-    const observer = new PerformanceObserver((list) => {
-      const external = list.getEntries().filter(isExternal).length;
-      if (external > 0) setCount((n) => (n ?? 0) + external);
-    });
-
-    try {
-      observer.observe({ type: 'resource', buffered: true });
-    } catch {
-      // A browser without resource timing: leave the readout off rather than print a
-      // zero that nothing actually measured.
-      return;
-    }
-
-    setCount((n) => n ?? 0);
-    return () => observer.disconnect();
-  }, []);
-
-  return count;
-}
-
 export function HeroDemo() {
   const [dialectId, setDialectId] = useState('postgresql');
   const { text, setText, typing, stopTyping } = useTypedIn(STARTER);
@@ -120,9 +79,9 @@ export function HeroDemo() {
       : 'apostrophes backslash-escaped (\\\')';
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--border-card)] bg-[var(--surface-header)] px-4 py-2.5">
-        <div className="flex flex-wrap items-center gap-1">
+    <div className="overflow-hidden rounded-2xl border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[0_24px_60px_-20px_oklch(0_0_0/0.55),0_0_0_1px_oklch(1_0_0/0.06)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--border-card)] bg-[var(--surface-header)] px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-[var(--border-card)] bg-[var(--surface-sunken)] p-[3px]">
           {CHIPS.map((chip) => {
             const active = chip.id === dialectId;
             return (
@@ -133,8 +92,8 @@ export function HeroDemo() {
                 aria-pressed={active}
                 className={
                   active
-                    ? 'rounded-md bg-accent-600 px-2.5 py-1 font-mono text-xs font-medium text-white'
-                    : 'rounded-md px-2.5 py-1 font-mono text-xs text-ink-600 transition-colors hover:bg-ink-200 dark:text-ink-400 dark:hover:bg-ink-800'
+                    ? 'rounded-md bg-gradient-to-b from-accent-500 to-accent-600 px-2.5 py-1 font-mono text-xs font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_2px_oklch(0.3_0.12_250/0.4)]'
+                    : 'rounded-md px-2.5 py-1 font-mono text-xs text-ink-600 transition-colors hover:bg-[var(--surface-card)] hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'
                 }
               >
                 {chip.name}
@@ -194,7 +153,7 @@ export function HeroDemo() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[var(--border-card)] px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[var(--border-card)] bg-[var(--surface-header)] px-4 py-2.5">
         <span id="hero-count" className="font-mono text-xs text-ink-500 dark:text-ink-400">
           {count} value{count === 1 ? '' : 's'} · {escaping}
         </span>
@@ -203,7 +162,7 @@ export function HeroDemo() {
           <span className="ml-auto flex items-center gap-2 font-mono text-xs">
             <span
               aria-hidden="true"
-              className={`size-1.5 rounded-full ${external === 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
+              className={`live-dot size-1.5 rounded-full ${external === 0 ? 'bg-emerald-500 text-emerald-500' : 'bg-red-500 text-red-500'}`}
             />
             <span className="text-ink-500 dark:text-ink-400">requests to another server</span>
             <span

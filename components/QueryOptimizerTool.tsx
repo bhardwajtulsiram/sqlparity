@@ -6,6 +6,8 @@ import { lintSql } from '@/lib/lint';
 import { reviewSql, RULE_COUNT, type ReviewFinding, type Severity } from '@/lib/review';
 import { usePersistentState } from '@/lib/settings';
 import { SqlEditor } from '@/components/SqlEditor';
+import { ToolHeader } from '@/components/ToolHeader';
+import { EraseIcon, SparkIcon } from '@/components/icons';
 import { Button, DialectSelect, Note, Panel, WarningList } from '@/components/ui';
 
 const EXAMPLE = `SELECT *
@@ -14,30 +16,49 @@ WHERE date(o.created_at) = '2026-01-01'
   AND c.name LIKE '%holdings'
 ORDER BY o.total DESC`;
 
-const SEVERITY_STYLE: Record<Severity, { dot: string; label: string }> = {
-  high: { dot: 'bg-red-500', label: 'Costly' },
-  medium: { dot: 'bg-amber-500', label: 'Worth fixing' },
-  low: { dot: 'bg-ink-400', label: 'Worth knowing' },
+const SEVERITY_STYLE: Record<Severity, { dot: string; pill: string; edge: string; label: string }> = {
+  high: {
+    dot: 'bg-red-500',
+    pill: 'bg-red-500/10 text-red-700 ring-red-500/25 dark:text-red-300',
+    edge: 'bg-red-500',
+    label: 'Costly',
+  },
+  medium: {
+    dot: 'bg-amber-500',
+    pill: 'bg-amber-500/12 text-amber-800 ring-amber-500/30 dark:text-amber-300',
+    edge: 'bg-amber-500',
+    label: 'Worth fixing',
+  },
+  low: {
+    dot: 'bg-ink-400',
+    pill: 'bg-ink-500/10 text-ink-600 ring-ink-500/20 dark:text-ink-300',
+    edge: 'bg-ink-300 dark:bg-ink-600',
+    label: 'Worth knowing',
+  },
 };
 
 function Finding({ finding }: { finding: ReviewFinding }) {
   const style = SEVERITY_STYLE[finding.severity];
   return (
-    <li className="rounded-lg border border-[var(--border-card)] bg-[var(--surface-sunken)] p-4">
-      <div className="flex items-baseline gap-2.5">
-        <span className={`mt-1.5 size-2 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
-        <h3 className="text-[15px] font-semibold">{finding.title}</h3>
-        <span className="ml-auto shrink-0 text-xs text-ink-500 dark:text-ink-400">
+    <li className="relative overflow-hidden rounded-lg border border-[var(--border-card)] bg-[var(--surface-card)] py-4 pr-4 pl-5 shadow-[var(--shadow-control)]">
+      {/* The edge carries the severity, so a list of findings sorts itself by colour. */}
+      <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-[3px] ${style.edge}`} />
+      <div className="flex items-start gap-3">
+        <h3 className="text-[14.5px] leading-snug font-semibold">{finding.title}</h3>
+        <span
+          className={`ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-medium ring-1 ${style.pill}`}
+        >
+          <span aria-hidden="true" className={`size-1.5 rounded-full ${style.dot}`} />
           {style.label}
         </span>
       </div>
-      <p className="mt-2 pl-[1.125rem] text-[13px] leading-relaxed text-ink-600 dark:text-ink-300">
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-600 dark:text-ink-300">
         {finding.why}
       </p>
-      <p className="mt-2 pl-[1.125rem] text-[13px] leading-relaxed">
+      <div className="mt-3 rounded-md border border-[var(--border-card)] bg-[var(--surface-header)] px-3 py-2 text-[13px] leading-relaxed">
         <span className="font-medium">Do this instead: </span>
         <span className="text-ink-600 dark:text-ink-300">{finding.fix}</span>
-      </p>
+      </div>
     </li>
   );
 }
@@ -63,17 +84,15 @@ export function QueryOptimizerTool() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Query optimizer</h1>
-          <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-            {RULE_COUNT} checks for the patterns that make a query scan more than it needs to.
-          </p>
-        </div>
-        <div className="w-56">
-          <DialectSelect value={dialectId} onChange={setDialectId} label="Dialect" />
-        </div>
-      </div>
+      <ToolHeader
+        href="/query-optimizer/"
+        description={`${RULE_COUNT} checks for the patterns that make a query scan more than it needs to, each with the reason it costs something.`}
+        status={
+          <div className="w-56">
+            <DialectSelect value={dialectId} onChange={setDialectId} label="Dialect" />
+          </div>
+        }
+      />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel
@@ -81,10 +100,10 @@ export function QueryOptimizerTool() {
           title="Your query"
           actions={
             <>
-              <Button variant="ghost" onClick={() => setInput(EXAMPLE)}>
+              <Button variant="ghost" icon={<SparkIcon />} onClick={() => setInput(EXAMPLE)}>
                 Example
               </Button>
-              <Button variant="ghost" onClick={() => setInput('')} disabled={!input}>
+              <Button variant="ghost" icon={<EraseIcon />} onClick={() => setInput('')} disabled={!input}>
                 Clear
               </Button>
             </>

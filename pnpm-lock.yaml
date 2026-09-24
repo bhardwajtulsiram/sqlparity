@@ -35,6 +35,9 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: 1.33.1-dev57.0
         version: 1.33.1-dev57.0
+      '@lezer/highlight':
+        specifier: 1.2.3
+        version: 1.2.3
       dt-sql-parser:
         specifier: ^4.5.1
         version: 4.5.1(antlr4ng-cli@1.0.7)

@@ -6,6 +6,8 @@ import { DEFAULT_FORMAT, formatSql, type FormatSettings, type KeywordCase } from
 import { lintSql } from '@/lib/lint';
 import { usePersistentState } from '@/lib/settings';
 import { SqlEditor } from '@/components/SqlEditor';
+import { ToolHeader } from '@/components/ToolHeader';
+import { EraseIcon, ResetIcon, SparkIcon } from '@/components/icons';
 import { supportsValidation } from '@/lib/validate';
 import {
   Button,
@@ -42,14 +44,11 @@ export function SqlFormatterTool() {
 
   return (
     <div className="space-y-5">
-      {/* Title shares the band with the handful of settings people actually reach for. */}
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">SQL formatter</h1>
-          <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-            Format SQL for 16 dialects. Nothing is uploaded.
-          </p>
-        </div>
+      {/* The toolbar holds the handful of settings people actually reach for. */}
+      <ToolHeader
+        href="/sql-formatter/"
+        description="Format SQL for 16 dialects, with a syntax check as you type. Nothing is uploaded."
+      >
         <div className="w-56">
           <DialectSelect value={dialectId} onChange={setDialectId} label="Format as" />
         </div>
@@ -78,7 +77,7 @@ export function SqlFormatterTool() {
             />
           </Field>
         </div>
-      </div>
+      </ToolHeader>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel
@@ -86,10 +85,10 @@ export function SqlFormatterTool() {
           title="Your SQL"
           actions={
             <>
-              <Button variant="ghost" onClick={() => setInput(EXAMPLE)}>
+              <Button variant="ghost" icon={<SparkIcon />} onClick={() => setInput(EXAMPLE)}>
                 Example
               </Button>
-              <Button variant="ghost" onClick={() => setInput('')} disabled={!input}>
+              <Button variant="ghost" icon={<EraseIcon />} onClick={() => setInput('')} disabled={!input}>
                 Clear
               </Button>
             </>
@@ -227,7 +226,9 @@ export function SqlFormatterTool() {
         </div>
 
         <div className="mt-6 border-t border-[var(--border-card)] pt-4">
-          <Button onClick={() => setSettings(DEFAULT_FORMAT)}>Reset to defaults</Button>
+          <Button icon={<ResetIcon />} onClick={() => setSettings(DEFAULT_FORMAT)}>
+            Reset to defaults
+          </Button>
         </div>
       </Disclosure>
     </div>

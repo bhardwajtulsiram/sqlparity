@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { DIALECTS } from '@/lib/dialects';
+import {
+  AlertIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronIcon,
+  CopyIcon,
+  ErrorIcon,
+  InfoIcon,
+} from '@/components/icons';
 
 /* ------------------------------------------------------------------- panel */
 
@@ -24,30 +34,48 @@ export function Panel({
   tone?: 'default' | 'primary';
   className?: string;
 }) {
+  const primary = tone === 'primary';
   return (
     <section
-      className={`overflow-hidden rounded-xl border ${
-        tone === 'primary' ? 'border-accent-500/40' : 'border-[var(--border-card)]'
-      } bg-[var(--surface-card)] shadow-[var(--shadow-card)] ${className}`}
+      className={`relative overflow-hidden rounded-xl border bg-[var(--surface-card)] shadow-[var(--shadow-card)] ${
+        primary ? 'border-accent-500/45' : 'border-[var(--border-card)]'
+      } ${className}`}
     >
+      {/* The result panel carries a lit top edge, so the eye lands on the payoff first. */}
+      {primary && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-accent-500 via-accent-400 to-[var(--signal)]"
+        />
+      )}
       {(title || actions) && (
         <div
-          className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--border-card)] px-5 py-3.5 ${
-            tone === 'primary' ? 'bg-accent-500/12' : 'bg-[var(--surface-header)]'
+          className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-5 py-3 ${
+            primary
+              ? 'border-accent-500/20 bg-gradient-to-b from-accent-500/[0.07] to-transparent'
+              : 'border-[var(--border-card)] bg-[var(--surface-header)]'
           }`}
         >
           {step !== undefined && (
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-600 text-xs font-semibold text-white">
+            <span
+              className={`flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-[11.5px] font-semibold ${
+                primary
+                  ? 'bg-gradient-to-b from-accent-500 to-accent-600 text-white shadow-[0_1px_2px_oklch(0.3_0.1_250/0.4),inset_0_1px_0_rgb(255_255_255/0.2)]'
+                  : 'bg-[var(--surface-card)] text-ink-600 ring-1 ring-[var(--border-strong)] dark:text-ink-300'
+              }`}
+            >
               {step}
             </span>
           )}
-          <div className="min-w-0">
-            {title && <h2 className="text-[15px] leading-tight font-semibold">{title}</h2>}
+          <div className="min-w-0 py-0.5">
+            {title && <h2 className="text-[14.5px] leading-tight font-semibold">{title}</h2>}
             {description && (
-              <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">{description}</p>
+              <p className="mt-1 text-[12.5px] leading-snug text-ink-500 dark:text-ink-400">
+                {description}
+              </p>
             )}
           </div>
-          {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
+          {actions && <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>}
         </div>
       )}
       <div className="p-5">{children}</div>
@@ -74,30 +102,28 @@ export function Disclosure({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--border-card)]">
+    <div className="overflow-hidden rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-control)]">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 bg-[var(--surface-header)] px-4 py-2.5 text-left text-sm font-medium hover:brightness-[0.97]"
+        className="group flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-[var(--surface-header)]"
       >
-        <svg
-          viewBox="0 0 12 12"
-          aria-hidden="true"
-          className={`size-3 shrink-0 fill-none stroke-current stroke-2 transition-transform ${
-            open ? 'rotate-90' : ''
-          }`}
-        >
-          <path d="M4 2l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-[var(--border-card)] bg-[var(--surface-header)] text-ink-500 group-hover:text-ink-800 dark:text-ink-400 dark:group-hover:text-ink-100">
+          <ChevronIcon
+            className={`size-3.5 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+          />
+        </span>
         {label}
         {hint && !open && (
-          <span className="truncate text-xs font-normal text-ink-500 dark:text-ink-400">
-            — {hint}
+          <span className="truncate text-[12.5px] font-normal text-ink-500 dark:text-ink-400">
+            {hint}
           </span>
         )}
       </button>
-      {open && <div className="border-t border-[var(--border-card)] p-4">{children}</div>}
+      {open && (
+        <div className="animate-fade border-t border-[var(--border-card)] p-5">{children}</div>
+      )}
     </div>
   );
 }
@@ -124,12 +150,12 @@ export function Toggle({
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`mt-px h-5 w-9 shrink-0 rounded-full transition-colors ${
+        className={`mt-px h-5 w-9 shrink-0 rounded-full shadow-[inset_0_1px_2px_oklch(0.2_0.02_265/0.2)] transition-colors duration-200 ${
           checked ? 'bg-accent-600' : 'bg-ink-300 dark:bg-ink-700'
         }`}
       >
         <span
-          className={`block size-4 rounded-full bg-white transition-transform ${
+          className={`block size-4 rounded-full bg-white shadow-[0_1px_2px_oklch(0.2_0.02_265/0.35)] transition-transform duration-200 ${
             checked ? 'translate-x-4.5' : 'translate-x-0.5'
           }`}
         />
@@ -160,14 +186,14 @@ export function Segmented<T extends string>({
   return (
     <div>
       {label && (
-        <span className="mb-2 block text-[13px] font-medium text-ink-700 dark:text-ink-300">
+        <span className="mb-1.5 block text-[12.5px] font-medium text-ink-600 dark:text-ink-300">
           {label}
         </span>
       )}
       <div
         role="radiogroup"
         aria-label={label}
-        className="inline-flex rounded-lg bg-ink-100 p-0.5 dark:bg-ink-800"
+        className="inline-flex h-9 items-stretch rounded-lg border border-[var(--border-card)] bg-[var(--surface-sunken)] p-[3px]"
       >
         {options.map((option) => (
           <button
@@ -177,10 +203,10 @@ export function Segmented<T extends string>({
             aria-checked={value === option.value}
             title={option.title}
             onClick={() => onChange(option.value)}
-            className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            className={`rounded-md px-3 text-[13px] font-medium whitespace-nowrap transition-all ${
               value === option.value
-                ? 'bg-[var(--surface-card)] text-accent-700 shadow-sm dark:text-accent-400'
-                : 'text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'
+                ? 'bg-[var(--surface-card)] text-accent-700 shadow-[0_1px_2px_oklch(0.2_0.02_265/0.12),0_0_0_1px_oklch(0.2_0.02_265/0.06)] dark:bg-ink-700 dark:text-white'
+                : 'text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'
             }`}
           >
             {option.label}
@@ -204,7 +230,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[13px] font-medium text-ink-700 dark:text-ink-300">
+      <span className="mb-1.5 block text-[12.5px] font-medium text-ink-600 dark:text-ink-300">
         {label}
       </span>
       {children}
@@ -214,7 +240,7 @@ export function Field({
 }
 
 const CONTROL =
-  'w-full rounded-lg border border-[var(--border-card)] bg-[var(--surface-card)] px-3 py-2 text-sm outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25';
+  'h-9 w-full rounded-lg border border-[var(--border-card)] bg-[var(--surface-card)] px-3 text-sm shadow-[var(--shadow-control)] outline-none transition-[border-color,box-shadow] placeholder:text-ink-400 hover:border-[var(--border-strong)] focus:border-accent-500 focus:ring-3 focus:ring-accent-500/20';
 
 export function Select({
   value,
@@ -230,15 +256,18 @@ export function Select({
   title?: string;
 }) {
   return (
-    <select
-      className={`${CONTROL} disabled:cursor-not-allowed disabled:opacity-50`}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      title={title}
-    >
-      {children}
-    </select>
+    <div className="relative">
+      <select
+        className={`${CONTROL} cursor-pointer appearance-none truncate pr-9 disabled:cursor-not-allowed disabled:opacity-50`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        title={title}
+      >
+        {children}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-ink-400" />
+    </div>
   );
 }
 
@@ -283,7 +312,7 @@ export function NumberInput({
   return (
     <input
       type="number"
-      className={CONTROL}
+      className={`${CONTROL} font-mono tabular-nums`}
       value={value}
       min={min}
       max={max}
@@ -309,13 +338,18 @@ export function TextInput({
   return (
     <input
       type="text"
-      className={`${CONTROL} ${mono ? 'font-mono' : ''}`}
+      className={`${CONTROL} ${mono ? 'font-mono text-[13px]' : ''}`}
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
     />
   );
 }
+
+const WELL =
+  'shadow-[inset_0_1px_2px_oklch(0.2_0.02_265/0.05)] outline-none transition-[border-color,box-shadow,background-color] placeholder:text-ink-400';
+const WELL_FOCUS =
+  'focus:border-accent-500 focus:bg-[var(--surface-card)] focus:ring-3 focus:ring-accent-500/20';
 
 /** A large paste target. The main input on two of the three tools. */
 export function PasteArea({
@@ -343,8 +377,8 @@ export function PasteArea({
       rows={rows}
       placeholder={placeholder}
       style={minHeight ? { minHeight } : undefined}
-      className={`w-full resize-y rounded-lg border border-[var(--border-card)] bg-[var(--surface-sunken)] p-3.5 font-mono text-[13px] leading-relaxed outline-none ${
-        readOnly ? '' : 'focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25'
+      className={`w-full resize-y rounded-lg border border-[var(--border-card)] bg-[var(--surface-sunken)] p-3.5 font-mono text-[13px] leading-relaxed ${WELL} ${
+        readOnly ? '' : WELL_FOCUS
       }`}
     />
   );
@@ -410,11 +444,11 @@ export function ColumnBox({
         disabled={disabled}
         spellCheck={false}
         rows={10}
-        className={`w-full resize-y rounded-lg p-3 font-mono text-[13px] leading-relaxed outline-none disabled:cursor-not-allowed ${
+        className={`w-full resize-y rounded-lg p-3 font-mono text-[13px] leading-relaxed disabled:cursor-not-allowed ${
           dashed
-            ? 'border border-dashed border-[var(--border-card)] bg-[var(--surface-sunken)]'
+            ? 'border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)]'
             : 'border border-[var(--border-card)] bg-[var(--surface-sunken)]'
-        } ${disabled ? '' : 'focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25'}`}
+        } ${WELL} ${disabled ? '' : WELL_FOCUS}`}
       />
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
         <span
@@ -455,20 +489,25 @@ export function Button({
   variant = 'secondary',
   disabled,
   title,
+  icon,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   variant?: 'primary' | 'secondary' | 'ghost';
   disabled?: boolean;
   title?: string;
+  /** A leading glyph from components/icons; the button sizes it. */
+  icon?: React.ReactNode;
 }) {
   const base =
-    'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40';
+    'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-medium whitespace-nowrap transition-all active:translate-y-px disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0';
   const styles = {
-    primary: 'bg-accent-600 text-white hover:bg-accent-700',
+    primary:
+      'bg-gradient-to-b from-accent-500 to-accent-600 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_2px_oklch(0.3_0.12_250/0.45),0_0_0_1px_oklch(0.46_0.16_250)] hover:from-accent-600 hover:to-accent-700',
     secondary:
-      'border border-[var(--border-card)] text-ink-700 hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800',
-    ghost: 'text-ink-600 hover:bg-ink-100 dark:text-ink-400 dark:hover:bg-ink-800',
+      'border border-[var(--border-card)] bg-[var(--surface-card)] text-ink-700 shadow-[var(--shadow-control)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-header)] dark:text-ink-200',
+    ghost:
+      'text-ink-600 hover:bg-ink-900/[0.055] hover:text-ink-900 dark:text-ink-400 dark:hover:bg-white/[0.07] dark:hover:text-ink-100',
   }[variant];
   return (
     <button
@@ -478,6 +517,7 @@ export function Button({
       title={title}
       className={`${base} ${styles}`}
     >
+      {icon}
       {children}
     </button>
   );
@@ -547,13 +587,23 @@ export function CopyButton({
       variant={variant}
       disabled={!text}
       title={state === 'failed' ? 'Your browser blocked clipboard access' : undefined}
+      icon={state === 'copied' ? <CheckIcon /> : state === 'failed' ? <AlertIcon /> : <CopyIcon />}
     >
-      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Press Ctrl+C' : label}
+      <span aria-live="polite">
+        {state === 'copied' ? 'Copied' : state === 'failed' ? 'Press Ctrl+C' : label}
+      </span>
     </Button>
   );
 }
 
 /* ---------------------------------------------------------------- messages */
+
+const NOTE_ICON = {
+  info: InfoIcon,
+  warn: AlertIcon,
+  error: ErrorIcon,
+  success: CheckCircleIcon,
+};
 
 export function Note({
   tone = 'info',
@@ -563,12 +613,22 @@ export function Note({
   children: React.ReactNode;
 }) {
   const styles = {
-    info: 'bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300',
-    warn: 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
-    error: 'bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200',
-    success: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+    info: 'border-[var(--border-card)] bg-[var(--surface-header)] text-ink-600 dark:text-ink-300 [&>svg]:text-ink-400',
+    warn: 'border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400',
+    error:
+      'border-red-300/70 bg-red-50 text-red-900 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-200 [&>svg]:text-red-600 dark:[&>svg]:text-red-400',
+    success:
+      'border-emerald-300/70 bg-emerald-50 text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-300 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-400',
   }[tone];
-  return <div className={`rounded-lg px-3.5 py-2.5 text-[13px] ${styles}`}>{children}</div>;
+  const Icon = NOTE_ICON[tone];
+  return (
+    <div
+      className={`flex gap-2.5 rounded-lg border px-3.5 py-2.5 text-[13px] leading-relaxed ${styles}`}
+    >
+      <Icon className="mt-[3px] size-4 shrink-0" />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
 }
 
 export function WarningList({

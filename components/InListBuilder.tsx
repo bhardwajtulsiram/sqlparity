@@ -19,6 +19,8 @@ import {
 } from '@/lib/inlist';
 import type { ValueMode } from '@/lib/escape';
 import { usePersistentState } from '@/lib/settings';
+import { ToolHeader } from '@/components/ToolHeader';
+import { EraseIcon, UploadIcon } from '@/components/icons';
 import {
   Button,
   CopyButton,
@@ -146,14 +148,17 @@ export function InListBuilder() {
 
   return (
     <div className="space-y-5">
-      {/* Title shares the band with the two choices that change what you get. */}
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">SQL IN list builder</h1>
-          <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-            Paste values — get a quoted, escaped <code className="font-mono">IN (…)</code> clause.
-          </p>
-        </div>
+      {/* The toolbar holds the two choices that change what you get. */}
+      <ToolHeader
+        href="/in-list-builder/"
+        description={
+          <>
+            Paste a column of values and get a quoted, escaped{' '}
+            <code className="font-mono text-[13px]">IN (…)</code> clause — apostrophes,
+            backslashes and leading zeros included.
+          </>
+        }
+      >
         <div className="w-56">
           <DialectSelect value={dialectId} onChange={setDialectId} label="Quote it for" />
         </div>
@@ -182,7 +187,7 @@ export function InListBuilder() {
             hint="IN list back to plain values"
           />
         </div>
-      </div>
+      </ToolHeader>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel
@@ -206,10 +211,10 @@ export function InListBuilder() {
                   e.target.value = '';
                 }}
               />
-              <Button variant="ghost" onClick={() => fileInput.current?.click()}>
+              <Button variant="ghost" icon={<UploadIcon />} onClick={() => fileInput.current?.click()}>
                 Upload
               </Button>
-              <Button variant="ghost" onClick={() => setInput('')} disabled={!input}>
+              <Button variant="ghost" icon={<EraseIcon />} onClick={() => setInput('')} disabled={!input}>
                 Clear
               </Button>
             </>

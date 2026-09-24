@@ -39,13 +39,25 @@
    * An earlier version put page at 0.965 against a white card — a 0.035 lightness
    * difference, which reads on screen as one continuous white sheet.
    */
-  --surface-page: oklch(0.928 0.004 265);
-  --surface-header: oklch(0.963 0.005 265);
+  --surface-page: oklch(0.938 0.006 265);
+  --surface-header: oklch(0.975 0.004 265);
   --surface-card: #fff;
-  --surface-sunken: oklch(0.951 0.005 265);
-  --border-card: oklch(0.868 0.008 265);
+  --surface-sunken: oklch(0.955 0.005 265);
+  --border-card: oklch(0.878 0.008 265);
+  --border-strong: oklch(0.8 0.012 265);
+  /* Layered: a hairline contact shadow, then a wide soft one. A single blur reads as
+     a sticker; two read as a sheet resting on a surface. */
   --shadow-card:
-    0 1px 2px oklch(0.2 0.02 265 / 0.08), 0 2px 6px oklch(0.2 0.02 265 / 0.06);
+    0 1px 1px oklch(0.2 0.02 265 / 0.05), 0 2px 4px oklch(0.2 0.02 265 / 0.04),
+    0 8px 24px -8px oklch(0.2 0.03 265 / 0.1);
+  --shadow-raised:
+    0 1px 2px oklch(0.2 0.02 265 / 0.06), 0 12px 32px -10px oklch(0.25 0.05 265 / 0.22);
+  --shadow-control: 0 1px 2px oklch(0.2 0.02 265 / 0.07);
+  --ring: 0 0 0 3px oklch(0.62 0.17 250 / 0.28);
+
+  /* The one signal colour: things that are verified local. Same as the string hue. */
+  --signal: oklch(0.62 0.14 162);
+  --signal-soft: oklch(0.62 0.14 162 / 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,8 +66,13 @@
     --surface-header: oklch(0.247 0.017 265);
     --surface-card: oklch(0.205 0.015 265);
     --surface-sunken: oklch(0.163 0.013 265);
-    --border-card: oklch(0.325 0.018 265);
-    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
+    --border-card: oklch(0.31 0.018 265);
+    --border-strong: oklch(0.4 0.02 265);
+    --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px -10px oklch(0 0 0 / 0.5);
+    --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.5), 0 16px 40px -12px oklch(0 0 0 / 0.7);
+    --shadow-control: 0 1px 2px oklch(0 0 0 / 0.35);
+    --signal: oklch(0.78 0.13 162);
+    --signal-soft: oklch(0.78 0.13 162 / 0.12);
   }
 }
 
@@ -75,6 +92,9 @@
   --code-surface: oklch(0.205 0.026 265);
   --code-header: oklch(0.26 0.028 265);
   --code-border: oklch(0.32 0.03 265);
+  --code-gutter: oklch(0.52 0.025 265);
+  --code-active: oklch(1 0 0 / 0.045);
+  --code-selection: oklch(0.62 0.17 250 / 0.38);
 
   --syn-plain: oklch(0.9 0.008 265);
   --syn-keyword: oklch(0.79 0.115 305);
@@ -97,7 +117,7 @@
 
 /*
  * One orchestrated moment: the hero demo types itself in on load, which shows the
- * tool working before anyone touches it. Anything decorative beyond that is off.
+ * tool working before anyone touches it. Everything else that moves answers a click.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -130,4 +150,126 @@ select {
 ::selection {
   background: var(--color-accent-500);
   color: white;
+}
+
+/* ------------------------------------------------------------- focus ring */
+
+/* Keyboard focus is always visible and always the same ring, whatever the control. */
+:where(a, button, [role='switch'], [role='radio'], summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* --------------------------------------------------------------- backdrop */
+
+/*
+ * A faint grid behind the top of every page: graph paper for a tool that deals in
+ * rows and columns. Masked to fade out, so it frames the page title and is gone by
+ * the time you reach the work.
+ */
+.page-backdrop {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 520px;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(60rem 22rem at 18% -6rem, oklch(0.62 0.17 250 / 0.13), transparent 70%),
+    radial-gradient(40rem 18rem at 88% -4rem, oklch(0.78 0.13 162 / 0.12), transparent 70%),
+    linear-gradient(to right, oklch(0.5 0.02 265 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.5 0.02 265 / 0.07) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    32px 32px,
+    32px 32px;
+  mask-image: linear-gradient(to bottom, black 30%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .page-backdrop {
+    background-image:
+      radial-gradient(60rem 22rem at 18% -6rem, oklch(0.62 0.17 250 / 0.2), transparent 70%),
+      radial-gradient(40rem 18rem at 88% -4rem, oklch(0.78 0.13 162 / 0.1), transparent 70%),
+      linear-gradient(to right, oklch(1 0 0 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 0.04) 1px, transparent 1px);
+  }
+}
+
+/* The same grid, lit, for the dark feature band on the home page. */
+.screen-grid {
+  background-image:
+    radial-gradient(48rem 24rem at 12% 0%, oklch(0.62 0.17 250 / 0.28), transparent 65%),
+    radial-gradient(36rem 20rem at 100% 100%, oklch(0.78 0.13 162 / 0.16), transparent 65%),
+    linear-gradient(to right, oklch(1 0 0 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 0.045) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    28px 28px,
+    28px 28px;
+}
+
+/* ------------------------------------------------------------- scrollbars */
+
+.code-scroll,
+.cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.45 0.025 265) transparent;
+}
+
+/* ----------------------------------------------------------------- motion */
+
+/* A live reading: the dot breathes so it reads as measured now, not printed once. */
+@keyframes live-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.live-dot {
+  position: relative;
+}
+
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: live-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-palette {
+  animation: palette-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.animate-fade {
+  animation: fade-in 140ms ease-out;
 }

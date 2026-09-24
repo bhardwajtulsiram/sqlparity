@@ -17,6 +17,7 @@ import { sendFieldsHandoff } from '@/lib/handoff';
 import { usePersistentState } from '@/lib/settings';
 import { SqlEditor, type HighlightedLine } from '@/components/SqlEditor';
 import { Button, DialectSelect, Note, Panel, Toggle } from '@/components/ui';
+import { ToolHeader } from '@/components/ToolHeader';
 
 const SQL_BEFORE = `CREATE EXTERNAL TABLE prod_db.customer_snapshot (
   customer_id string,
@@ -286,31 +287,33 @@ export function SchemaDiffTool() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-4 rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Schema diff</h1>
-          <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-            Paste two <code className="font-mono">CREATE TABLE</code> statements, or two
-            Elasticsearch index mappings. There is no format to pick — each side is read as
+      <ToolHeader
+        href="/schema-diff/"
+        description={
+          <>
+            Paste two <code className="font-mono text-[13px]">CREATE TABLE</code> statements, or
+            two Elasticsearch index mappings. There is no format to pick — each side is read as
             whatever you paste into it.
-          </p>
-        </div>
-        <div className="w-56">
-          {/* Greyed rather than removed when both sides are mappings. A control that
-              vanishes reads as a bug; one that is visibly inapplicable explains itself. */}
-          <DialectSelect
-            value={dialectId}
-            onChange={setDialectId}
-            label="SQL dialect"
-            disabled={bothEs}
-            title={
-              bothEs
-                ? 'Both sides are Elasticsearch mappings, which are JSON — there is no SQL grammar to choose.'
-                : 'Which grammar to read the CREATE TABLE statements with.'
-            }
-          />
-        </div>
-      </div>
+          </>
+        }
+        status={
+          <div className="w-56">
+            {/* Greyed rather than removed when both sides are mappings. A control that
+                vanishes reads as a bug; one that is visibly inapplicable explains itself. */}
+            <DialectSelect
+              value={dialectId}
+              onChange={setDialectId}
+              label="SQL dialect"
+              disabled={bothEs}
+              title={
+                bothEs
+                  ? 'Both sides are Elasticsearch mappings, which are JSON — there is no SQL grammar to choose.'
+                  : 'Which grammar to read the CREATE TABLE statements with.'
+              }
+            />
+          </div>
+        }
+      />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SchemaPane

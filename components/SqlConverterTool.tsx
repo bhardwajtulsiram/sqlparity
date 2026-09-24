@@ -5,6 +5,8 @@ import { convertSql } from '@/lib/convert';
 import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { usePersistentState } from '@/lib/settings';
 import { SqlEditor } from '@/components/SqlEditor';
+import { ToolHeader } from '@/components/ToolHeader';
+import { ArrowRightIcon, EraseIcon, SparkIcon, SwapIcon } from '@/components/icons';
 import { Button, CopyButton, DialectSelect, Note, Panel } from '@/components/ui';
 
 const EXAMPLE = `SELECT TOP 10
@@ -40,23 +42,20 @@ export function SqlConverterTool() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-4 rounded-xl border border-[var(--border-card)] bg-[var(--surface-card)] px-5 py-4 shadow-[var(--shadow-card)]">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">SQL converter</h1>
-          <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
-            Rewrite quoting, escaping, row limits and function names between 16 dialects.
-          </p>
-        </div>
+      <ToolHeader
+        href="/sql-converter/"
+        description="Rewrite quoting, escaping, row limits and function names between 16 dialects, with a list of what it refused to guess at."
+      >
         <div className="w-52">
           <DialectSelect value={fromId} onChange={setFromId} label="From" />
         </div>
-        <Button onClick={swap} title="Swap the two dialects">
+        <Button onClick={swap} title="Swap the two dialects" icon={<SwapIcon className="rotate-90" />}>
           Swap
         </Button>
         <div className="w-52">
           <DialectSelect value={toId} onChange={setToId} label="To" />
         </div>
-      </div>
+      </ToolHeader>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel
@@ -64,10 +63,10 @@ export function SqlConverterTool() {
           title={`${from.label} query`}
           actions={
             <>
-              <Button variant="ghost" onClick={() => setInput(EXAMPLE)}>
+              <Button variant="ghost" icon={<SparkIcon />} onClick={() => setInput(EXAMPLE)}>
                 Example
               </Button>
-              <Button variant="ghost" onClick={() => setInput('')} disabled={!input}>
+              <Button variant="ghost" icon={<EraseIcon />} onClick={() => setInput('')} disabled={!input}>
                 Clear
               </Button>
             </>
@@ -108,16 +107,23 @@ export function SqlConverterTool() {
               {result.changes.map((change) => (
                 <li
                   key={change.kind + change.from}
-                  className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-lg bg-[var(--surface-sunken)] px-3.5 py-2.5 text-[13px]"
+                  className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border px-3.5 py-2.5 text-[13px]"
+                  style={{ background: 'var(--code-surface)', borderColor: 'var(--code-border)' }}
                 >
-                  <code className="font-mono text-ink-500 line-through dark:text-ink-400">
+                  <code
+                    className="font-mono line-through decoration-1 opacity-80"
+                    style={{ color: 'var(--syn-operator)' }}
+                  >
                     {change.from}
                   </code>
-                  <span aria-hidden="true" className="text-ink-400">
-                    →
-                  </span>
-                  <code className="font-mono font-medium">{change.to}</code>
-                  <span className="ml-auto text-xs text-ink-500 dark:text-ink-400">
+                  <ArrowRightIcon className="size-3.5 shrink-0 text-[var(--syn-comment)]" />
+                  <code className="font-mono font-medium" style={{ color: 'var(--syn-string)' }}>
+                    {change.to}
+                  </code>
+                  <span
+                    className="ml-auto rounded-full px-2 py-0.5 font-mono text-[11px]"
+                    style={{ background: 'var(--code-header)', color: 'var(--syn-comment)' }}
+                  >
                     {change.count} place{change.count === 1 ? '' : 's'}
                   </span>
                 </li>
