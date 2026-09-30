@@ -203,6 +203,25 @@ Two details that are easy to get wrong:
 [`public/_headers`](public/_headers) carries the same policy for hosts that read it, plus
 `frame-ancestors` and the other headers a meta tag cannot express.
 
+### Visitor analytics
+
+The deployment on Vercel counts page views with Vercel Web Analytics
+([`components/SiteAnalytics.tsx`](components/SiteAnalytics.tsx)). It needed no change to the
+policy above: on Vercel both its script (`/_vercel/insights/script.js`) and its beacon are served
+from the site's own domain, so they are `'self'`. It sets no cookies, and sees page paths, never
+anything typed into a tool.
+
+- **Production builds only.** In development the package would load a debug script from
+  `va.vercel-scripts.com`, which the policy rightly blocks, so nothing is rendered locally.
+- **Paths, not full URLs.** A `beforeSend` hook drops the query string and fragment from every
+  event. No tool puts data in a URL today; this keeps a future one from leaking a column name
+  into a visitor report.
+- **Other hosts.** Deployed anywhere but Vercel, the script path returns 404 and nothing is
+  counted — the tools are unaffected.
+
+Analytics must be enabled for the project in the Vercel dashboard (Analytics tab) before events
+are recorded.
+
 ### Comparing Elasticsearch index mappings
 
 `/schema-diff` takes index mappings as well as SQL, deciding per side from what was pasted rather

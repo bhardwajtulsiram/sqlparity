@@ -8,9 +8,10 @@ import { TOOLS } from '@/components/tools';
  */
 const GUARANTEES = [
   'Every tool computes its result in this tab.',
-  'No account, no upload, nothing stored on a server.',
+  'No account, and nothing you paste is uploaded or stored.',
   'The browser is told to refuse any request to another origin.',
   'Fonts and the query engine are served from this site.',
+  'Visits are counted without cookies; what you paste is never part of it.',
 ];
 
 export function SiteFooter() {
