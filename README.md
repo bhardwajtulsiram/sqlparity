@@ -5,6 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 [![Website](https://img.shields.io/badge/Live_App-sqlparity.com-informational)](https://www.sqlparity.com)
 
+> 🚀 **Live Web Application:** [**https://www.sqlparity.com**](https://www.sqlparity.com)  
+> *100% private, client-side SQL tools. No account, no upload, zero telemetry.*
+
 Browser-only SQL tools for data-migration verification: querying a local file, bulk query
 generation, schema diffing, value escaping, formatting, query review and dialect conversion.
 
@@ -14,15 +17,17 @@ be hosted anywhere.
 
 ## Tools
 
-| Route | What it does |
-| --- | --- |
-| `/scratchpad` | Drop in a CSV or Parquet file and query it with real SQL, via DuckDB compiled to WebAssembly |
-| `/in-list-builder` | Paste a column of values, get a properly quoted and escaped `IN (…)` clause |
-| `/bulk-query-generator` | One template plus a list of fields, one query per field |
-| `/schema-diff` | Compare two `CREATE TABLE` statements or two Elasticsearch index mappings |
-| `/sql-formatter` | Format SQL for 16 dialects |
-| `/query-optimizer` | Review a query for the patterns that make it scan more than it needs to |
-| `/sql-converter` | Translate quoting, escaping, row limits and function names between dialects |
+Try any tool live on [**sqlparity.com**](https://www.sqlparity.com):
+
+| Tool | Route | What it does |
+| :--- | :--- | :--- |
+| **SQL Scratchpad** | [`/scratchpad`](https://www.sqlparity.com/scratchpad) | Drop in a CSV or Parquet file and query it with real SQL, via DuckDB compiled to WebAssembly |
+| **IN List Builder** | [`/in-list-builder`](https://www.sqlparity.com/in-list-builder) | Paste a column of values, get a properly quoted and escaped `IN (…)` clause |
+| **Bulk Query Generator** | [`/bulk-query-generator`](https://www.sqlparity.com/bulk-query-generator) | One template plus a list of fields, one query per field |
+| **Schema Diff** | [`/schema-diff`](https://www.sqlparity.com/schema-diff) | Compare two `CREATE TABLE` statements or two Elasticsearch index mappings |
+| **SQL Formatter** | [`/sql-formatter`](https://www.sqlparity.com/sql-formatter) | Format SQL for 16 dialects |
+| **Query Optimizer** | [`/query-optimizer`](https://www.sqlparity.com/query-optimizer) | Review a query for the patterns that make it scan more than it needs to |
+| **SQL Converter** | [`/sql-converter`](https://www.sqlparity.com/sql-converter) | Translate quoting, escaping, row limits and function names between dialects |
 
 ## Running it
 
