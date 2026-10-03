@@ -17,7 +17,7 @@ const GUARANTEES = [
 export function SiteFooter() {
   return (
     <footer className="relative z-10 mt-16 border-t border-[var(--border-card)] bg-[var(--surface-card)]">
-      <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
+      <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.2fr)]">
         <div>
           <Link href="/" className="inline-flex items-center gap-2.5">
             <ParityMark className="size-7" />
@@ -31,7 +31,7 @@ export function SiteFooter() {
 
         <div>
           <h2 className="text-[13px] font-semibold text-ink-900 dark:text-ink-100">Tools</h2>
-          <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 md:grid-cols-1">
+          <ul className="mt-4 grid grid-cols-1 gap-y-2.5">
             {TOOLS.map((tool) => (
               <li key={tool.href}>
                 <Link
@@ -43,6 +43,52 @@ export function SiteFooter() {
                 </Link>
               </li>
             ))}
+          </ul>
+        </div>
+
+        <div>
+          <h2 className="text-[13px] font-semibold text-ink-900 dark:text-ink-100">Project & Guides</h2>
+          <ul className="mt-4 space-y-2.5">
+            <li>
+              <Link
+                href="/about/"
+                className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-accent-600 dark:text-ink-300 dark:hover:text-accent-400 transition-colors"
+              >
+                <span>About & Philosophy</span>
+                <span className="text-accent-600 dark:text-accent-400 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/faq/"
+                className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-accent-600 dark:text-ink-300 dark:hover:text-accent-400 transition-colors"
+              >
+                <span>Frequently Asked Questions</span>
+                <span className="text-accent-600 dark:text-accent-400 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+              </Link>
+            </li>
+            <li>
+              <a
+                href="https://github.com/bhardwajtulsiram/sqlparity"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-accent-600 dark:text-ink-300 dark:hover:text-accent-400 transition-colors"
+              >
+                <span>GitHub Repository</span>
+                <span className="text-ink-400 group-hover:text-accent-600 transition-colors">↗</span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://github.com/bhardwajtulsiram/sqlparity/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-accent-600 dark:text-ink-300 dark:hover:text-accent-400 transition-colors"
+              >
+                <span>Report an Issue</span>
+                <span className="text-ink-400 group-hover:text-accent-600 transition-colors">↗</span>
+              </a>
+            </li>
           </ul>
         </div>
 
