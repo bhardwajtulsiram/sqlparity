@@ -15,7 +15,7 @@ At **SQL Parity**, security and privacy are central to our design. Our core prom
 
 ## Supported Versions
 
-Only the latest version deployed on `main` (and live at [sqlparity.vercel.app](https://sqlparity.vercel.app)) is actively maintained and supported with security updates.
+Only the latest version deployed on `main` (and live at [www.sqlparity.com](https://www.sqlparity.com)) is actively maintained and supported with security updates.
 
 | Version | Supported |
 | :--- | :--- |

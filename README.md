@@ -3,7 +3,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Privacy](https://img.shields.io/badge/Privacy-100%25_Browser--Only-brightgreen)](SECURITY.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![Website](https://img.shields.io/badge/Live_App-sqlparity.vercel.app-informational)](https://sqlparity.vercel.app)
+[![Website](https://img.shields.io/badge/Live_App-sqlparity.com-informational)](https://www.sqlparity.com)
 
 Browser-only SQL tools for data-migration verification: querying a local file, bulk query
 generation, schema diffing, value escaping, formatting, query review and dialect conversion.

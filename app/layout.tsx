@@ -81,6 +81,7 @@ const CONTENT_SECURITY_POLICY = [
 ].join('; ');
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.sqlparity.com'),
   title: {
     default: 'SQLParity — SQL tools that never see your data',
     template: '%s — SQLParity',

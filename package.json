@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "Tulsiram Bhardwaj <bhardwajtulsiram@gmail.com>",
-  "homepage": "https://sqlparity.vercel.app",
+  "homepage": "https://www.sqlparity.com",
   "repository": {
     "type": "git",
     "url": "https://github.com/bhardwajtulsiram/sqlparity.git"
