@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { convertSql } from '@/lib/convert';
 import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { usePersistentState } from '@/lib/settings';
@@ -18,6 +18,11 @@ FROM [sales].[orders]
 WHERE [created_at] > GETDATE()
   AND [note] = 'O''Brien'`;
 
+export interface SqlConverterToolProps {
+  initialFromId?: string;
+  initialToId?: string;
+}
+
 /**
  * Conversion with the receipts shown.
  *
@@ -26,18 +31,47 @@ WHERE [created_at] > GETDATE()
  * the result comes with both lists — what was rewritten, and what was recognised and
  * deliberately left alone, each with the reason. The second list is the useful one.
  */
-export function SqlConverterTool() {
+export function SqlConverterTool({ initialFromId, initialToId }: SqlConverterToolProps = {}) {
   const [input, setInput] = useState(EXAMPLE);
-  const [fromId, setFromId] = usePersistentState('convert-from', 'transactsql');
-  const [toId, setToId] = usePersistentState('convert-to', DEFAULT_DIALECT_ID);
+  const [persistentFrom, setPersistentFrom] = usePersistentState('convert-from', 'transactsql');
+  const [persistentTo, setPersistentTo] = usePersistentState('convert-to', DEFAULT_DIALECT_ID);
+
+  const [fromId, setFromId] = useState<string>(initialFromId || 'transactsql');
+  const [toId, setToId] = useState<string>(initialToId || DEFAULT_DIALECT_ID);
+
+  useEffect(() => {
+    if (!initialFromId) {
+      setFromId(persistentFrom);
+    }
+  }, [initialFromId, persistentFrom]);
+
+  useEffect(() => {
+    if (!initialToId) {
+      setToId(persistentTo);
+    }
+  }, [initialToId, persistentTo]);
 
   const from = useMemo(() => getDialect(fromId), [fromId]);
   const to = useMemo(() => getDialect(toId), [toId]);
   const result = useMemo(() => convertSql(input, from, to), [input, from, to]);
 
+  const handleFromChange = (newFrom: string) => {
+    setFromId(newFrom);
+    if (!initialFromId) setPersistentFrom(newFrom);
+  };
+
+  const handleToChange = (newTo: string) => {
+    setToId(newTo);
+    if (!initialToId) setPersistentTo(newTo);
+  };
+
   const swap = () => {
-    setFromId(toId);
-    setToId(fromId);
+    const prevFrom = fromId;
+    const prevTo = toId;
+    setFromId(prevTo);
+    setToId(prevFrom);
+    if (!initialFromId) setPersistentFrom(prevTo);
+    if (!initialToId) setPersistentTo(prevFrom);
   };
 
   return (
@@ -47,13 +81,13 @@ export function SqlConverterTool() {
         description="Rewrite quoting, escaping, row limits and function names between 16 dialects, with a list of what it refused to guess at."
       >
         <div className="w-52">
-          <DialectSelect value={fromId} onChange={setFromId} label="From" />
+          <DialectSelect value={fromId} onChange={handleFromChange} label="From" />
         </div>
         <Button onClick={swap} title="Swap the two dialects" icon={<SwapIcon className="rotate-90" />}>
           Swap
         </Button>
         <div className="w-52">
-          <DialectSelect value={toId} onChange={setToId} label="To" />
+          <DialectSelect value={toId} onChange={handleToChange} label="To" />
         </div>
       </ToolHeader>
 

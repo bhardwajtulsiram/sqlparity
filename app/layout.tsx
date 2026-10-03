@@ -89,6 +89,54 @@ export const metadata: Metadata = {
   description:
     'Generate hundreds of validation queries from a CREATE TABLE, diff two schemas, build escaped IN lists, format SQL for 16 dialects, review a query for expensive patterns and convert between database engines. Everything is computed in your browser — no account, no upload.',
   applicationName: 'SQLParity',
+  alternates: {
+    canonical: '/',
+  },
+  keywords: [
+    'SQL tools',
+    'SQL dialect converter',
+    'SQL schema diff',
+    'bulk validation queries',
+    'DuckDB in browser',
+    'query parquet online',
+    'SQL IN list builder',
+    'SQL formatter 16 dialects',
+    'privacy first SQL tool',
+    'client side SQL',
+    'database migration tools',
+  ],
+  openGraph: {
+    title: 'SQLParity — SQL tools that never see your data',
+    description:
+      'Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing, formatting, DuckDB scratchpad, and dialect conversion. 100% computed in-browser.',
+    url: 'https://www.sqlparity.com',
+    siteName: 'SQLParity',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SQLParity — In-Browser SQL Migration & Analysis Tools',
+    description:
+      'SQL tools that never see your data. 100% computed in your browser — no account, no upload, zero telemetry.',
+  },
+};
+
+const JSON_LD_DATA = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'SQLParity',
+  url: 'https://www.sqlparity.com',
+  description:
+    'Client-side, privacy-first SQL utilities for schema diffing, bulk validation queries, DuckDB in-tab querying, and dialect conversion.',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'All',
+  browserRequirements: 'Requires JavaScript, WASM support',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -100,6 +148,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         but is not enforced is worse than none, because you stop looking.
       */}
       <meta httpEquiv="Content-Security-Policy" content={CONTENT_SECURITY_POLICY} />
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD_DATA) }}
+        />
+      </head>
       <body className="relative flex min-h-screen flex-col antialiased">
         <div aria-hidden="true" className="page-backdrop" />
         <SiteHeader />

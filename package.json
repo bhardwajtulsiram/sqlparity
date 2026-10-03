@@ -16,7 +16,7 @@
   "scripts": {
     "predev": "node scripts/copy-duckdb.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/copy-duckdb.mjs",
+    "prebuild": "node scripts/copy-duckdb.mjs && node scripts/generate-sitemap.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
