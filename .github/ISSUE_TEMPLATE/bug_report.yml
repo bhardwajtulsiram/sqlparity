@@ -1,0 +1,86 @@
+name: Bug Report
+description: Report unexpected behavior, incorrect SQL output, parsing bugs, or rendering errors.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue in **SQL Parity**!
+        Please ensure your issue is reproducible and doesn't contain sensitive production data.
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which Tool has the issue?
+      description: Select the specific SQL Parity tool where you encountered the bug.
+      options:
+        - "SQL Scratchpad (/scratchpad)"
+        - "IN List Builder (/in-list-builder)"
+        - "Bulk Query Generator (/bulk-query-generator)"
+        - "Schema Diff (/schema-diff)"
+        - "SQL Formatter (/sql-formatter)"
+        - "Query Optimizer (/query-optimizer)"
+        - "SQL Converter (/sql-converter)"
+        - "Other / General"
+    validations:
+      required: true
+  - type: dropdown
+    id: dialect
+    attributes:
+      label: SQL Dialect (if applicable)
+      description: Which SQL dialect was active when the problem occurred?
+      options:
+        - "PostgreSQL"
+        - "MySQL"
+        - "SQL Server (T-SQL)"
+        - "Oracle"
+        - "Snowflake"
+        - "BigQuery"
+        - "SQLite"
+        - "DuckDB"
+        - "Trino / Presto"
+        - "Redshift"
+        - "ClickHouse"
+        - "Spark SQL"
+        - "Hive"
+        - "Other"
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of the Bug
+      description: Clear and concise description of what happened.
+      placeholder: Describe the issue...
+    validations:
+      required: true
+  - type: textarea
+    id: input_sql
+    attributes:
+      label: Input SQL / Values
+      description: Provide the input text that reproduces the bug (sanitize sensitive data).
+      render: sql
+      placeholder: SELECT ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior / Output
+      description: What did you expect to happen or what SQL should have been generated?
+      render: sql
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Output / Error Message
+      description: What was the actual output or console error?
+      render: sql
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser & OS
+      description: e.g., Chrome 129 on Windows 11, Safari 17 on macOS Sonoma, Firefox 131 on Ubuntu.
+      placeholder: Chrome 129 on macOS
+    validations:
+      required: false

@@ -1,0 +1,34 @@
+name: Dialect Syntax / Engine Request
+description: Request support for a new database engine or specific SQL grammar construct.
+labels: ["enhancement", "dialect"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to request a new database dialect or specific function/syntax support.
+  - type: input
+    id: engine_name
+    attributes:
+      label: Database Engine / Dialect
+      placeholder: e.g., Databricks SQL, CockroachDB, MariaDB
+    validations:
+      required: true
+  - type: textarea
+    id: syntax_details
+    attributes:
+      label: Syntax / Function Details
+      description: Explain the specific quoting, escaping, functions, or LIMIT syntax required.
+      placeholder: |
+        Function: DATE_TRUNC vs TRUNC
+        Quoting: backticks vs double quotes
+        Escaping: standard vs backslash
+    validations:
+      required: true
+  - type: textarea
+    id: documentation_links
+    attributes:
+      label: Official Documentation Links
+      description: Provide links to the official vendor documentation describing this behavior.
+      placeholder: https://docs.vendor.com/sql-reference/...
+    validations:
+      required: true

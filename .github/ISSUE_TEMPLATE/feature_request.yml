@@ -1,0 +1,30 @@
+name: Feature Request
+description: Propose a new client-side SQL tool or capability for SQL Parity.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please ensure feature requests align with our architectural commitment to **100% client-side execution** (no server-side uploads or storage).
+  - type: input
+    id: summary
+    attributes:
+      label: Feature Summary
+      placeholder: A concise 1-sentence summary of the proposal
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What data-engineering or SQL task does this solve?
+      placeholder: As a data engineer migrating from X to Y, I need to...
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution / Workflow
+      description: How should the tool or feature behave in the browser?
+    validations:
+      required: true

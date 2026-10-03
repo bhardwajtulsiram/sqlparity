@@ -2,6 +2,16 @@
   "name": "sqlparity",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "Tulsiram Bhardwaj <bhardwajtulsiram@gmail.com>",
+  "homepage": "https://sqlparity.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bhardwajtulsiram/sqlparity.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bhardwajtulsiram/sqlparity/issues"
+  },
   "description": "Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing, escaping, formatting, query review and dialect conversion. Nothing leaves your machine.",
   "scripts": {
     "predev": "node scripts/copy-duckdb.mjs",

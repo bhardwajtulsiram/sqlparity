@@ -1,4 +1,9 @@
-# SQLParity
+# SQLParity (SQL Parity)
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Privacy](https://img.shields.io/badge/Privacy-100%25_Browser--Only-brightgreen)](SECURITY.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+[![Website](https://img.shields.io/badge/Live_App-sqlparity.vercel.app-informational)](https://sqlparity.vercel.app)
 
 Browser-only SQL tools for data-migration verification: querying a local file, bulk query
 generation, schema diffing, value escaping, formatting, query review and dialect conversion.
@@ -407,4 +412,22 @@ for a correctness tool.
   Reported as unconverted instead.
 - **A data-type fallback for unknown types.** Those columns are left out and named rather than
   given a plausible sentinel.
+
+## Contributing
+
+Contributions, dialect additions, and bug fixes are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request.
+
+## Security
+
+Security and privacy are core to SQL Parity. To report a security vulnerability or data leak flaw privately, please refer to our [Security Policy](SECURITY.md).
+
+## Trademark & Brand Policy
+
+**SQL Parity™** and **SQLParity™** are trademarks of Tulsiram Bhardwaj. 
+
+The software code is licensed under the AGPLv3, but this does not grant permission to use the brand name, logo, or trade dress for forks, derivative products, or commercial rehosting. Please review [TRADEMARK.md](TRADEMARK.md) for full terms and acceptable usage guidelines.
+
+## License
+
+This project is licensed under the **GNU Affero General Public License Version 3 (AGPLv3)** — see the [LICENSE](LICENSE) file for details.
 

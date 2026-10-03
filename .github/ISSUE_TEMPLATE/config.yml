@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerabilities
+    url: https://github.com/bhardwajtulsiram/sqlparity/blob/main/SECURITY.md
+    about: Please report security vulnerabilities privately via email as described in our security policy.
+  - name: Ask a Question / Discussions
+    url: https://github.com/bhardwajtulsiram/sqlparity/discussions
+    about: Ask questions or discuss ideas with the community.
