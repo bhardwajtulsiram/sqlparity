@@ -69,8 +69,24 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-[var(--border-card)]">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-5 text-xs text-ink-500 sm:px-6 dark:text-ink-400">
-          <p>© {new Date().getFullYear()} SQLParity</p>
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 text-xs text-ink-500 sm:px-6 dark:text-ink-400">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <p>© {new Date().getFullYear()} SQLParity</p>
+            <Link href="/about/" className="hover:text-ink-800 dark:hover:text-ink-200 transition-colors">
+              About
+            </Link>
+            <Link href="/faq/" className="hover:text-ink-800 dark:hover:text-ink-200 transition-colors">
+              FAQ
+            </Link>
+            <a
+              href="https://github.com/bhardwajtulsiram/sqlparity"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-ink-800 dark:hover:text-ink-200 transition-colors"
+            >
+              GitHub
+            </a>
+          </div>
           <p>Your settings are kept in this browser only.</p>
         </div>
       </div>

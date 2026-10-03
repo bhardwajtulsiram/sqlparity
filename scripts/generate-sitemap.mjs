@@ -9,6 +9,8 @@ const dialects = [
 const baseUrl = 'https://www.sqlparity.com';
 const core = [
   '',
+  '/about',
+  '/faq',
   '/scratchpad',
   '/in-list-builder',
   '/bulk-query-generator',
