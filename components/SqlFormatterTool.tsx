@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { DEFAULT_FORMAT, formatSql, type FormatSettings, type KeywordCase } from '@/lib/format';
 import { lintSql } from '@/lib/lint';
@@ -31,16 +31,32 @@ const CASE_OPTIONS: { value: KeywordCase; label: string }[] = [
   { value: 'lower', label: 'lower' },
 ];
 
-export function SqlFormatterTool() {
+export interface SqlFormatterToolProps {
+  initialDialectId?: string;
+}
+
+export function SqlFormatterTool({ initialDialectId }: SqlFormatterToolProps = {}) {
   const [input, setInput] = useState(EXAMPLE);
-  const [dialectId, setDialectId] = usePersistentState('dialect', DEFAULT_DIALECT_ID);
+  const [persistentDialectId, setPersistentDialectId] = usePersistentState('dialect', DEFAULT_DIALECT_ID);
+  const [dialectId, setDialectId] = useState<string>(initialDialectId || DEFAULT_DIALECT_ID);
   const [settings, setSettings] = usePersistentState<FormatSettings>('format', DEFAULT_FORMAT);
+
+  useEffect(() => {
+    if (!initialDialectId) {
+      setDialectId(persistentDialectId);
+    }
+  }, [initialDialectId, persistentDialectId]);
 
   const dialect = useMemo(() => getDialect(dialectId), [dialectId]);
   const outcome = useMemo(() => formatSql(input, dialect, settings), [input, dialect, settings]);
   const safetyFindings = useMemo(() => lintSql(input, dialect), [input, dialect]);
 
   const patch = (next: Partial<FormatSettings>) => setSettings({ ...settings, ...next });
+
+  const handleDialectChange = (newDialect: string) => {
+    setDialectId(newDialect);
+    if (!initialDialectId) setPersistentDialectId(newDialect);
+  };
 
   return (
     <div className="space-y-5">
@@ -50,7 +66,7 @@ export function SqlFormatterTool() {
         description="Format SQL for 16 dialects, with a syntax check as you type. Nothing is uploaded."
       >
         <div className="w-56">
-          <DialectSelect value={dialectId} onChange={setDialectId} label="Format as" />
+          <DialectSelect value={dialectId} onChange={handleDialectChange} label="Format as" />
         </div>
         <Segmented
           label="Keywords"

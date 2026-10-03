@@ -113,12 +113,21 @@ export const metadata: Metadata = {
     siteName: 'SQLParity',
     locale: 'en_US',
     type: 'website',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'SQLParity — SQL tools that never see your data',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'SQLParity — In-Browser SQL Migration & Analysis Tools',
     description:
       'SQL tools that never see your data. 100% computed in your browser — no account, no upload, zero telemetry.',
+    images: ['/og-image.png'],
   },
 };
 
