@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { lintSql } from '@/lib/lint';
 import { reviewSql, RULE_COUNT, type ReviewFinding, type Severity } from '@/lib/review';
 import { usePersistentState } from '@/lib/settings';
+import { decodeShareState } from '@/lib/share';
+import { ShareButton } from '@/components/ShareButton';
 import { SqlEditor } from '@/components/SqlEditor';
 import { ToolHeader } from '@/components/ToolHeader';
 import { EraseIcon, SparkIcon } from '@/components/icons';
@@ -76,6 +78,19 @@ export function QueryOptimizerTool() {
   const [input, setInput] = useState(EXAMPLE);
   const [dialectId, setDialectId] = usePersistentState('dialect', DEFAULT_DIALECT_ID);
 
+  // Restore shared state from URL hash (#share=...) if present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const decoded = decodeShareState<{ input?: string; dialectId?: string }>(
+        window.location.hash
+      );
+      if (decoded) {
+        if (decoded.input !== undefined) setInput(decoded.input);
+        if (decoded.dialectId) setDialectId(decoded.dialectId);
+      }
+    }
+  }, [setDialectId]);
+
   const dialect = useMemo(() => getDialect(dialectId), [dialectId]);
   const findings = useMemo(() => reviewSql(input, dialect), [input, dialect]);
   const safety = useMemo(() => lintSql(input, dialect), [input, dialect]);
@@ -88,8 +103,14 @@ export function QueryOptimizerTool() {
         href="/query-optimizer/"
         description={`${RULE_COUNT} checks for the patterns that make a query scan more than it needs to, each with the reason it costs something.`}
         status={
-          <div className="w-56">
-            <DialectSelect value={dialectId} onChange={setDialectId} label="Dialect" />
+          <div className="flex flex-wrap items-center gap-3">
+            <ShareButton
+              getState={() => ({ input, dialectId })}
+              label="Share Review"
+            />
+            <div className="w-56">
+              <DialectSelect value={dialectId} onChange={setDialectId} label="Dialect" />
+            </div>
           </div>
         }
       />

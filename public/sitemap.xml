@@ -61,6 +61,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.sqlparity.com/in-list-builder/oracle-1000-limit/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.sqlparity.com/sql-formatter/postgresql/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

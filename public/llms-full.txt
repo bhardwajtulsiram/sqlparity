@@ -1,0 +1,66 @@
+# SQLParity (Full Technical Specification)
+
+> 100% private, client-side SQL utilities for data engineering, migrations, and schema validation.
+> Website: https://www.sqlparity.com
+> GitHub: https://github.com/bhardwajtulsiram/sqlparity
+
+---
+
+## 1. Architectural Philosophy & Threat Model
+
+1. **Zero-Server Compute:** Every computation (DuckDB WebAssembly execution, DDL parsing, regex tokenization, AST inspection) is executed locally inside the user's browser runtime.
+2. **Deterministic Security:** The site serves an immutable Content Security Policy meta header: `connect-src 'self'`. Modern browsers enforce this header by throwing hard network exceptions if any code tries to send requests outside the site's origin.
+3. **No Cookies & Anonymous Edge Counting:** No cookies are read or set (`document.cookie` is unused). Vercel Web Analytics runs in production only, strictly stripping all query strings and hash parameters before reporting anonymous page counts.
+4. **Offline Capability:** Once assets are cached, all tools execute with 0 internet connection required.
+
+---
+
+## 2. Tools Overview
+
+### 2.1 DuckDB Scratchpad (/scratchpad/)
+- **Engine:** `@duckdb/duckdb-wasm` (WebAssembly build of DuckDB).
+- **File Ingestion:** Ingests local `.parquet`, `.csv`, `.tsv`, and `.json` files via the browser HTML5 File API into virtual in-memory file buffers (`duckdb.registerFileBuffer`).
+- **Query Execution:** Runs full standard DuckDB SQL in-memory.
+- **Export Formats:** Direct client-side streaming exports to CSV and Microsoft Excel (.xlsx via `write-excel-file`).
+- **Memory Footprint:** Operates within browser WebAssembly memory boundaries (typically handles files from a few KB up to several hundred MBs).
+
+### 2.2 SQL Dialect Converter (/sql-converter/)
+- **Dialects Supported:** 16 engines (PostgreSQL, MySQL, SQLite, T-SQL, Oracle, MariaDB, Snowflake, BigQuery, Redshift, Trino/Athena, Spark SQL, Hive, ClickHouse, DuckDB, IBM Db2, ANSI SQL).
+- **Conversion Philosophy ("Receipts, Not Guesses"):** Translates syntax constructs (identifier quoting, backslash string escaping, `LIMIT`/`OFFSET` vs `TOP` vs `FETCH FIRST`, string concatenation, common functions like `IFNULL`/`NVL`/`COALESCE`, `NOW`/`CURRENT_TIMESTAMP`, `LENGTH`/`LEN`). When a function has incompatible signatures or dialect-specific side-effects, it is intentionally marked as unconverted in a receipt list rather than guessed.
+
+### 2.3 Schema Diff (/schema-diff/)
+- **Parsers:** Client-side DDL parser (`lib/ddl.ts`) and Elasticsearch index mapping reader (`lib/es-mapping.ts`).
+- **Capabilities:** Normalizes data types (e.g. `VARCHAR(255)`, `TEXT`, `INT4`, `BIGINT`), parses column definitions, nullability, primary keys, and constraints.
+- **Diff Engine:** Computes additions, removals, type modifications, and nullability discrepancies with visual side-by-side highlighting.
+
+### 2.4 Bulk Validation Query Generator (/bulk-query-generator/)
+- **Purpose:** Used during database migrations (e.g., migrating 100 tables from Oracle to Snowflake) to generate parity check queries.
+- **Functionality:** Accepts a query template (e.g., `SELECT COUNT(*), MIN({col}), MAX({col}) FROM {table};`) and an arbitrary list of column names or table names, outputting hundreds of validated, formatted queries.
+- **Exports:** One-click download as individual `.sql` files zipped locally (`fflate`) or exported as an `.xlsx` workbook.
+
+### 2.5 SQL Formatter (/sql-formatter/)
+- **Formatter Engine:** Backed by `sql-formatter` with custom dialect tokenizers.
+- **Dialects:** 16 dialects.
+- **Controls:** Indentation depth (2 spaces, 4 spaces, tabs), keyword case (UPPERCASE, lowercase, preserve), comma placement, expression wrapping.
+
+### 2.6 Query Optimizer / Linter (/query-optimizer/)
+- **Analysis:** AST parsing with `dt-sql-parser` and regex heuristics (`lib/review.ts`).
+- **Rule Set:**
+  - Leading wildcard in `LIKE '%...'` causing index invalidation.
+  - Implicit type coercion / functions wrapping indexed columns in `WHERE`.
+  - Missing `WHERE` clauses on `UPDATE` or `DELETE` statements.
+  - `SELECT *` in production analytical queries.
+  - Cartesian joins / cross joins without join keys.
+  - `COUNT(DISTINCT)` scale warnings.
+
+### 2.7 IN List Builder (/in-list-builder/)
+- **Parsing:** Automatic separator detection (newlines, commas, tabs, spreadsheet columns).
+- **Sanitization:** Deduplication, whitespace trimming, numeric vs string detection, NULL literal preservation.
+- **Dialect Quoting:** Proper escape characters per engine (doubled single quotes `''` vs backslash `\'`).
+
+---
+
+## 3. Contact & Open Source Community
+- Repository: https://github.com/bhardwajtulsiram/sqlparity
+- Issues & Requests: https://github.com/bhardwajtulsiram/sqlparity/issues
+- Contact Email: contact@sqlparity.com

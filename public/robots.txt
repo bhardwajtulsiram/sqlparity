@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://www.sqlparity.com/sitemap.xml
+# LLM Context: https://www.sqlparity.com/llms.txt

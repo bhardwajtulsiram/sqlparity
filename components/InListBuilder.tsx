@@ -19,6 +19,8 @@ import {
 } from '@/lib/inlist';
 import type { ValueMode } from '@/lib/escape';
 import { usePersistentState } from '@/lib/settings';
+import { decodeShareState } from '@/lib/share';
+import { ShareButton } from '@/components/ShareButton';
 import { ToolHeader } from '@/components/ToolHeader';
 import { EraseIcon, UploadIcon } from '@/components/icons';
 import {
@@ -44,23 +46,64 @@ O'Brien Holdings
 007
 customer_id_0034`;
 
-export function InListBuilder() {
-  const [input, setInput] = useState(EXAMPLE);
+export interface InListBuilderProps {
+  initialDialectId?: string;
+  initialChunking?: boolean;
+  initialChunkSize?: number;
+  initialInput?: string;
+  initialShape?: OutputShape;
+  initialColumnName?: string;
+}
+
+export function InListBuilder({
+  initialDialectId,
+  initialChunking,
+  initialChunkSize,
+  initialInput,
+  initialShape,
+  initialColumnName,
+}: InListBuilderProps = {}) {
+  const [input, setInput] = useState(initialInput || EXAMPLE);
   const [reverse, setReverse] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const [dialectId, setDialectId] = usePersistentState('dialect', DEFAULT_DIALECT_ID);
+  const [dialectId, setDialectId] = usePersistentState('dialect', initialDialectId || DEFAULT_DIALECT_ID);
   const [valueMode, setValueMode] = usePersistentState<ValueMode>('inlist.valueMode', 'auto');
-  const [shape, setShape] = usePersistentState<OutputShape>('inlist.shape', DEFAULT_BUILD.shape);
-  const [columnName, setColumnName] = usePersistentState('inlist.column', DEFAULT_BUILD.columnName);
+  const [shape, setShape] = usePersistentState<OutputShape>('inlist.shape', initialShape || DEFAULT_BUILD.shape);
+  const [columnName, setColumnName] = usePersistentState('inlist.column', initialColumnName || DEFAULT_BUILD.columnName);
   const [cleanup, setCleanup] = usePersistentState<CleanupOptions>(
     'inlist.cleanup',
     DEFAULT_CLEANUP,
   );
-  const [chunking, setChunking] = usePersistentState('inlist.chunking', false);
-  const [chunkSize, setChunkSize] = usePersistentState('inlist.chunkSize', 1000);
+  const [chunking, setChunking] = usePersistentState('inlist.chunking', initialChunking ?? false);
+  const [chunkSize, setChunkSize] = usePersistentState('inlist.chunkSize', initialChunkSize ?? 1000);
   const [wrapping, setWrapping] = usePersistentState('inlist.wrapping', true);
   const [wrapAt, setWrapAt] = usePersistentState('inlist.wrapAt', DEFAULT_BUILD.wrapAt);
+
+  // Restore shared state from URL hash (#share=...) if present
+  useMemo(() => {
+    // Intentionally run synchronously on initial render if window exists
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const decoded = decodeShareState<{
+        input?: string;
+        dialectId?: string;
+        shape?: OutputShape;
+        columnName?: string;
+        chunking?: boolean;
+        chunkSize?: number;
+        valueMode?: ValueMode;
+      }>(window.location.hash);
+      if (decoded) {
+        if (decoded.input !== undefined) setInput(decoded.input);
+        if (decoded.dialectId) setDialectId(decoded.dialectId);
+        if (decoded.shape) setShape(decoded.shape);
+        if (decoded.columnName) setColumnName(decoded.columnName);
+        if (decoded.chunking !== undefined) setChunking(decoded.chunking);
+        if (decoded.chunkSize) setChunkSize(decoded.chunkSize);
+        if (decoded.valueMode) setValueMode(decoded.valueMode);
+      }
+    }
+  }, []);
 
   // null = follow auto-detection; otherwise the user has overridden it.
   const [separatorOverride, setSeparatorOverride] = useState<Separator | null>(null);
@@ -157,6 +200,20 @@ export function InListBuilder() {
             <code className="font-mono text-[13px]">IN (…)</code> clause — apostrophes,
             backslashes and leading zeros included.
           </>
+        }
+        status={
+          <ShareButton
+            getState={() => ({
+              input,
+              dialectId,
+              shape,
+              columnName,
+              chunking,
+              chunkSize,
+              valueMode,
+            })}
+            label="Share List"
+          />
         }
       >
         <div className="w-56">

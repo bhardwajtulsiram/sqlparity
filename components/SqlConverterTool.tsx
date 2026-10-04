@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { convertSql } from '@/lib/convert';
 import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { usePersistentState } from '@/lib/settings';
+import { decodeShareState } from '@/lib/share';
+import { ShareButton } from '@/components/ShareButton';
 import { SqlEditor } from '@/components/SqlEditor';
 import { ToolHeader } from '@/components/ToolHeader';
 import { ArrowRightIcon, EraseIcon, SparkIcon, SwapIcon } from '@/components/icons';
@@ -51,6 +53,20 @@ export function SqlConverterTool({ initialFromId, initialToId }: SqlConverterToo
     }
   }, [initialToId, persistentTo]);
 
+  // Restore shared state from URL hash (#share=...) if present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const decoded = decodeShareState<{ input?: string; fromId?: string; toId?: string }>(
+        window.location.hash
+      );
+      if (decoded) {
+        if (decoded.input !== undefined) setInput(decoded.input);
+        if (decoded.fromId) setFromId(decoded.fromId);
+        if (decoded.toId) setToId(decoded.toId);
+      }
+    }
+  }, []);
+
   const from = useMemo(() => getDialect(fromId), [fromId]);
   const to = useMemo(() => getDialect(toId), [toId]);
   const result = useMemo(() => convertSql(input, from, to), [input, from, to]);
@@ -79,6 +95,12 @@ export function SqlConverterTool({ initialFromId, initialToId }: SqlConverterToo
       <ToolHeader
         href="/sql-converter/"
         description="Rewrite quoting, escaping, row limits and function names between 16 dialects, with a list of what it refused to guess at."
+        status={
+          <ShareButton
+            getState={() => ({ input, fromId, toId })}
+            label="Share Conversion"
+          />
+        }
       >
         <div className="w-52">
           <DialectSelect value={fromId} onChange={handleFromChange} label="From" />

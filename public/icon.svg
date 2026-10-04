@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="SQLParity">
+  <!--
+    Parity is an equals sign. Two identical bars say the thing the product is for —
+    proving that what came out matches what went in — and stay legible at 16px, where
+    a glyph or a wordmark would turn to mush.
+
+    The tile is the same dark code surface every SQL panel on the site uses, and the
+    bars take the string colour from that palette, so the icon is cut from the same
+    cloth as the pages rather than being a separate mark.
+  -->
+  <rect width="32" height="32" rx="7" fill="#20222c" />
+  <rect x="7" y="11" width="18" height="3.6" rx="1.8" fill="#6fdcae" />
+  <rect x="7" y="17.4" width="18" height="3.6" rx="1.8" fill="#6fdcae" />
+</svg>

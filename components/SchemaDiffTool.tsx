@@ -15,6 +15,8 @@ import {
 } from '@/lib/es-mapping';
 import { sendFieldsHandoff } from '@/lib/handoff';
 import { usePersistentState } from '@/lib/settings';
+import { decodeShareState } from '@/lib/share';
+import { ShareButton } from '@/components/ShareButton';
 import { SqlEditor, type HighlightedLine } from '@/components/SqlEditor';
 import { Button, DialectSelect, Note, Panel, Toggle } from '@/components/ui';
 import { ToolHeader } from '@/components/ToolHeader';
@@ -178,6 +180,20 @@ export function SchemaDiffTool() {
   const [afterText, setAfterText] = useState(SQL_AFTER);
   const [showUnchanged, setShowUnchanged] = useState(false);
 
+  // Restore shared state from URL hash (#share=...) if present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const decoded = decodeShareState<{ beforeText?: string; afterText?: string; dialectId?: string }>(
+        window.location.hash
+      );
+      if (decoded) {
+        if (decoded.beforeText !== undefined) setBeforeText(decoded.beforeText);
+        if (decoded.afterText !== undefined) setAfterText(decoded.afterText);
+        if (decoded.dialectId) setDialectId(decoded.dialectId);
+      }
+    }
+  }, [setDialectId]);
+
   const [before, setBefore] = useState<Side>(EMPTY);
   const [after, setAfter] = useState<Side>(EMPTY);
 
@@ -297,20 +313,26 @@ export function SchemaDiffTool() {
           </>
         }
         status={
-          <div className="w-56">
-            {/* Greyed rather than removed when both sides are mappings. A control that
-                vanishes reads as a bug; one that is visibly inapplicable explains itself. */}
-            <DialectSelect
-              value={dialectId}
-              onChange={setDialectId}
-              label="SQL dialect"
-              disabled={bothEs}
-              title={
-                bothEs
-                  ? 'Both sides are Elasticsearch mappings, which are JSON — there is no SQL grammar to choose.'
-                  : 'Which grammar to read the CREATE TABLE statements with.'
-              }
+          <div className="flex flex-wrap items-center gap-3">
+            <ShareButton
+              getState={() => ({ beforeText, afterText, dialectId })}
+              label="Share Diff"
             />
+            <div className="w-56">
+              {/* Greyed rather than removed when both sides are mappings. A control that
+                  vanishes reads as a bug; one that is visibly inapplicable explains itself. */}
+              <DialectSelect
+                value={dialectId}
+                onChange={setDialectId}
+                label="SQL dialect"
+                disabled={bothEs}
+                title={
+                  bothEs
+                    ? 'Both sides are Elasticsearch mappings, which are JSON — there is no SQL grammar to choose.'
+                    : 'Which grammar to read the CREATE TABLE statements with.'
+                }
+              />
+            </div>
           </div>
         }
       />

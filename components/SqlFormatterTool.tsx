@@ -5,6 +5,8 @@ import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { DEFAULT_FORMAT, formatSql, type FormatSettings, type KeywordCase } from '@/lib/format';
 import { lintSql } from '@/lib/lint';
 import { usePersistentState } from '@/lib/settings';
+import { decodeShareState } from '@/lib/share';
+import { ShareButton } from '@/components/ShareButton';
 import { SqlEditor } from '@/components/SqlEditor';
 import { ToolHeader } from '@/components/ToolHeader';
 import { EraseIcon, ResetIcon, SparkIcon } from '@/components/icons';
@@ -47,6 +49,20 @@ export function SqlFormatterTool({ initialDialectId }: SqlFormatterToolProps = {
     }
   }, [initialDialectId, persistentDialectId]);
 
+  // Restore shared state from URL hash (#share=...) if present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const decoded = decodeShareState<{ input?: string; dialectId?: string; settings?: FormatSettings }>(
+        window.location.hash
+      );
+      if (decoded) {
+        if (decoded.input !== undefined) setInput(decoded.input);
+        if (decoded.dialectId) setDialectId(decoded.dialectId);
+        if (decoded.settings) setSettings(decoded.settings);
+      }
+    }
+  }, []);
+
   const dialect = useMemo(() => getDialect(dialectId), [dialectId]);
   const outcome = useMemo(() => formatSql(input, dialect, settings), [input, dialect, settings]);
   const safetyFindings = useMemo(() => lintSql(input, dialect), [input, dialect]);
@@ -64,6 +80,12 @@ export function SqlFormatterTool({ initialDialectId }: SqlFormatterToolProps = {
       <ToolHeader
         href="/sql-formatter/"
         description="Format SQL for 16 dialects, with a syntax check as you type. Nothing is uploaded."
+        status={
+          <ShareButton
+            getState={() => ({ input, dialectId, settings })}
+            label="Share Query"
+          />
+        }
       >
         <div className="w-56">
           <DialectSelect value={dialectId} onChange={handleDialectChange} label="Format as" />

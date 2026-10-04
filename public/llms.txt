@@ -1,0 +1,49 @@
+# SQLParity
+
+> 100% private, client-side SQL utilities for data engineering and database migration verification. Everything runs in-browser via WebAssembly and JavaScript — no backend, no cookies, and nothing you paste is ever tracked or uploaded.
+
+- Website: https://www.sqlparity.com
+- GitHub: https://github.com/bhardwajtulsiram/sqlparity
+- License: AGPL-3.0
+- Contact: contact@sqlparity.com
+
+## Tools
+
+- [SQL Scratchpad](https://www.sqlparity.com/scratchpad/): Query local CSV, TSV, and Parquet files in-browser with analytical SQL using DuckDB-WASM. Zero file uploads.
+- [SQL Dialect Converter](https://www.sqlparity.com/sql-converter/): Translate queries between 16 database engines with transparent receipt logs of syntax changes and untranslated vendor functions.
+- [Schema Diff](https://www.sqlparity.com/schema-diff/): Compare two `CREATE TABLE` DDL statements or Elasticsearch index mappings with column-level structural diffing.
+- [Bulk Query Generator](https://www.sqlparity.com/bulk-query-generator/): Turn a SQL template and a column/table list into dozens of validated parity-check queries.
+- [SQL Formatter](https://www.sqlparity.com/sql-formatter/): Format SQL across 16 dialects with customizable keyword case, indent styles, and line breaks.
+- [Query Optimizer / Linter](https://www.sqlparity.com/query-optimizer/): Analyze queries client-side for full-table scan risks, missing join indexes, unindexed wildcards, and anti-patterns.
+- [IN List Builder](https://www.sqlparity.com/in-list-builder/): Clean, quote, deduplicate, and escape raw spreadsheet columns or IDs into valid SQL `IN (...)` clauses.
+
+## Supported Dialects (16 Engines)
+
+- PostgreSQL
+- MySQL
+- SQLite
+- SQL Server (Transact-SQL / T-SQL)
+- Oracle
+- MariaDB
+- Snowflake
+- Google BigQuery
+- Amazon Redshift
+- Trino / AWS Athena
+- Apache Spark SQL
+- Apache Hive
+- ClickHouse
+- DuckDB
+- IBM Db2
+- Standard SQL (ANSI)
+
+## Privacy & Security Architecture
+
+- **Client-Side Execution:** All SQL parsing, diffing, formatting, and DuckDB executions occur directly inside the user's browser CPU and RAM.
+- **Strict Content Security Policy:** The application serves `connect-src 'self'`, which strictly commands the browser to block any network call to external origins or remote APIs.
+- **No Cookies & No Tracking:** SQLParity sets no cookies, creates no user profiles, and never transmits queries, schemas, or file contents.
+- **Privacy-First Visitor Analytics:** Page visits are counted anonymously using Vercel Web Analytics without cookies, persistent identifiers, or URL query parameters.
+
+## Detailed Reference
+- Full tool specifications and dialect capabilities: https://www.sqlparity.com/llms-full.txt
+- Frequently Asked Questions: https://www.sqlparity.com/faq/
+- Project Philosophy: https://www.sqlparity.com/about/

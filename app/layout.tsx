@@ -129,6 +129,14 @@ export const metadata: Metadata = {
       'SQL tools that never see your data. 100% computed in your browser — no cookies, nothing you paste is ever tracked.',
     images: ['/og-image.png'],
   },
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+  },
 };
 
 const JSON_LD_DATA = {
@@ -158,6 +166,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       */}
       <meta httpEquiv="Content-Security-Policy" content={CONTENT_SECURITY_POLICY} />
       <head>
+        <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM Context" />
+        <meta name="theme-color" content="#11131c" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD_DATA) }}

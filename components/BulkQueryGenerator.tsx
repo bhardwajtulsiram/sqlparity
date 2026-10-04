@@ -36,6 +36,8 @@ import {
 } from '@/lib/typemap';
 import { downloadExcel, downloadNumberedSet, downloadSqlFile } from '@/lib/export';
 import { usePersistentState } from '@/lib/settings';
+import { decodeShareState } from '@/lib/share';
+import { ShareButton } from '@/components/ShareButton';
 import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
 import { ToolHeader } from '@/components/ToolHeader';
 import { DownloadIcon } from '@/components/icons';
@@ -153,6 +155,26 @@ export function BulkQueryGenerator() {
   const [pendingName, setPendingName] = useState('field');
   const [findToken, setFindToken] = useState('');
   const [exportNote, setExportNote] = useState('');
+
+  // Restore shared state from URL hash (#share=...) if present
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const decoded = decodeShareState<{
+        template?: string;
+        dialectId?: string;
+        namesText?: string;
+        outNamesText?: string;
+        typesText?: string;
+      }>(window.location.hash);
+      if (decoded) {
+        if (decoded.template !== undefined) setTemplate(decoded.template);
+        if (decoded.dialectId) setDialectId(decoded.dialectId);
+        if (decoded.namesText !== undefined) setNamesText(decoded.namesText);
+        if (decoded.outNamesText !== undefined) setOutNamesText(decoded.outNamesText);
+        if (decoded.typesText !== undefined) setTypesText(decoded.typesText);
+      }
+    }
+  }, [setTemplate, setDialectId]);
 
   const [ddl, setDdl] = useState<{
     state: 'idle' | 'parsing' | 'ready' | 'error';
@@ -678,6 +700,18 @@ export function BulkQueryGenerator() {
             fields and get one validation query per column, with the right null placeholder for
             each data type.
           </>
+        }
+        status={
+          <ShareButton
+            getState={() => ({
+              template,
+              dialectId,
+              namesText,
+              outNamesText,
+              typesText,
+            })}
+            label="Share Generator"
+          />
         }
         footer={
           preset?.summary || preset?.detail || (preset && presetUnavailable(preset, dialectId)) ? (
