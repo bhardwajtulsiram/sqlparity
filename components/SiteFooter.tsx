@@ -17,6 +17,39 @@ const GUARANTEES = [
 export function SiteFooter() {
   return (
     <footer className="relative z-10 mt-16 border-t border-[var(--border-card)] bg-[var(--surface-card)]">
+      {/* Contact Us Section */}
+      <div className="border-b border-[var(--border-card)] bg-[var(--surface-sunken)]/60">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-accent-600/10 text-accent-600 dark:bg-accent-400/10 dark:text-accent-400">
+                <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </span>
+              <h3 className="text-base font-bold tracking-tight text-ink-900 dark:text-white">
+                Contact Us
+              </h3>
+            </div>
+            <p className="text-xs text-ink-600 dark:text-ink-400 sm:text-sm">
+              Have questions, feedback, dialect requests, or commercial inquiries? Get in touch directly.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href="mailto:contact@sqlparity.com"
+              className="inline-flex items-center gap-2 rounded-xl bg-ink-900 dark:bg-white px-4 py-2.5 text-xs font-semibold text-white dark:text-ink-900 shadow-sm hover:opacity-90 transition-opacity"
+            >
+              <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <span>contact@sqlparity.com</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.2fr)]">
         <div>
           <Link href="/" className="inline-flex items-center gap-2.5">
@@ -89,6 +122,15 @@ export function SiteFooter() {
                 <span className="text-ink-400 group-hover:text-accent-600 transition-colors">↗</span>
               </a>
             </li>
+            <li>
+              <a
+                href="mailto:contact@sqlparity.com"
+                className="group inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-accent-600 dark:text-ink-300 dark:hover:text-accent-400 transition-colors"
+              >
+                <span>Contact Us</span>
+                <span className="text-ink-400 group-hover:text-accent-600 transition-colors">↗</span>
+              </a>
+            </li>
           </ul>
         </div>
 
@@ -124,6 +166,12 @@ export function SiteFooter() {
             <Link href="/faq/" className="hover:text-ink-800 dark:hover:text-ink-200 transition-colors">
               FAQ
             </Link>
+            <a
+              href="mailto:contact@sqlparity.com"
+              className="hover:text-ink-800 dark:hover:text-ink-200 transition-colors"
+            >
+              Contact
+            </a>
             <a
               href="https://github.com/bhardwajtulsiram/sqlparity"
               target="_blank"

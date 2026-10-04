@@ -35,7 +35,7 @@ If you discover a security vulnerability—especially anything related to:
 **Please do NOT disclose it in a public GitHub issue.**
 
 ### How to Report Privately:
-1. **Email:** Send a detailed report to **`bhardwajtulsiram@gmail.com`**.
+1. **Email:** Send a detailed report to **`contact@sqlparity.com`** (or **`bhardwajtulsiram@gmail.com`**).
 2. **Subject:** `[SECURITY] SQL Parity Vulnerability Report`
 3. **Include:**
    * A clear description of the vulnerability.
