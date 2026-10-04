@@ -68,8 +68,11 @@ $domainFont = [System.Drawing.Font]::new("Consolas", [single]19, [System.Drawing
 $mintBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml("#6fdcae"))
 $g.DrawString("https://www.sqlparity.com", $domainFont, $mintBrush, [single]90, [single]520)
 
-$openSourceFont = [System.Drawing.Font]::new("Segoe UI", [single]16, [System.Drawing.FontStyle]::Regular)
-$g.DrawString("Open Source  *  Zero Telemetry", $openSourceFont, $grayBrush, [single]840, [single]520)
+$openSourceFont = [System.Drawing.Font]::new("Segoe UI", [single]15, [System.Drawing.FontStyle]::Regular)
+$tagline = "No Cookies  *  Nothing Pasted Is Tracked"
+$tagSize = $g.MeasureString($tagline, $openSourceFont)
+$tagX = [single](1200 - 90 - $tagSize.Width)
+$g.DrawString($tagline, $openSourceFont, $grayBrush, $tagX, [single]522)
 
 $bmp.Save("public\og-image.png", [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose()

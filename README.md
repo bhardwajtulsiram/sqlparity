@@ -6,7 +6,7 @@
 [![Website](https://img.shields.io/badge/Live_App-sqlparity.com-informational)](https://www.sqlparity.com)
 
 > 🚀 **Live Web Application:** [**https://www.sqlparity.com**](https://www.sqlparity.com)  
-> *100% private, client-side SQL tools. No account, no upload, zero telemetry.*
+> *100% private, client-side SQL tools. No cookies, nothing you paste is ever tracked.*
 
 Browser-only SQL tools for data-migration verification: querying a local file, bulk query
 generation, schema diffing, value escaping, formatting, query review and dialect conversion.

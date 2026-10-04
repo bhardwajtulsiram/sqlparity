@@ -29,7 +29,7 @@ Only the latest version deployed on `main` (and live at [www.sqlparity.com](http
 If you discover a security vulnerability—especially anything related to:
 * Cross-Site Scripting (XSS) in query or error rendering,
 * Content Security Policy (CSP) bypasses,
-* Data leakage, unhandled external network calls, or telemetry flaws,
+* Data leakage, unhandled external network calls, or tracking flaws,
 * WebAssembly / DuckDB memory or sandbox vulnerabilities,
 
 **Please do NOT disclose it in a public GitHub issue.**

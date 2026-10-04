@@ -110,10 +110,10 @@ export default function AboutPage() {
               <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              <h3 className="font-semibold text-ink-900 dark:text-white">4. Zero Accounts, Zero Tracking</h3>
+              <h3 className="font-semibold text-ink-900 dark:text-white">4. No Cookies, No Tracking</h3>
             </div>
             <p className="text-xs leading-relaxed text-ink-600 dark:text-ink-400">
-              No login walls, no email gates, no tracking cookies, and no paywalls. You bookmark the URL and use it when you need it.
+              No cookies, nothing you paste is ever tracked. No login walls, no email gates, and no paywalls. You bookmark the URL and use it when you need it.
             </p>
           </div>
         </div>

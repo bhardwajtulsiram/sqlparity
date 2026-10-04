@@ -42,6 +42,11 @@ const FAQ_SECTIONS = [
         answer:
           'No. SQLParity has no backend database, no login system, and no user accounts. Basic UI preferences (like your preferred SQL dialect) are kept in your browser’s local storage only and never transmitted anywhere.',
       },
+      {
+        question: 'Does SQLParity use cookies or track what I paste?',
+        answer:
+          'No. SQLParity sets no cookies. We use privacy-friendly analytics to count aggregate page visits anonymously without cookies, IP tracking, or personal data. Most importantly: no cookies, nothing you paste is ever tracked, stored, or sent to any server.',
+      },
     ],
   },
   {

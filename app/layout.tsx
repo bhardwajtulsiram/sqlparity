@@ -126,7 +126,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'SQLParity — In-Browser SQL Migration & Analysis Tools',
     description:
-      'SQL tools that never see your data. 100% computed in your browser — no account, no upload, zero telemetry.',
+      'SQL tools that never see your data. 100% computed in your browser — no cookies, nothing you paste is ever tracked.',
     images: ['/og-image.png'],
   },
 };

@@ -8,8 +8,8 @@ Thank you for your interest in contributing to **SQL Parity**! We welcome commun
 
 Before submitting any code, please ensure your contribution adheres to our core architectural principles:
 
-1. **Zero-Telemetry & 100% Client-Side:**  
-   Everything must run entirely in the user's browser. **No PR will be accepted that introduces a remote backend, external API dependency, or third-party network call.**
+1. **No Data Uploads & 100% Client-Side:**  
+   Everything must run entirely in the user's browser (no cookies, nothing you paste is ever tracked). **No PR will be accepted that introduces a remote backend, external API dependency, or third-party network call.**
 2. **Deterministic & Safe Escaping:**  
    A wrong escape produces SQL that executes successfully and returns the wrong rows. All dialect escaping, formatting, and conversion changes must have corresponding unit test coverage in `tests/`.
 3. **Trademark Protection:**  
