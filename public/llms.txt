@@ -6,11 +6,17 @@
 - GitHub: https://github.com/bhardwajtulsiram/sqlparity
 - License: AGPL-3.0
 - Contact: contact@sqlparity.com
+- Privacy policy: https://www.sqlparity.com/privacy/
+- Terms of use: https://www.sqlparity.com/terms/
 
 ## Tools
 
+- [Parity Run](https://www.sqlparity.com/parity-run/): Prove two copies of a table hold the same data — before and after a pipeline, a replica and its primary, a source and its migrated copy. Drop both exports (CSV, Parquet, JSON); rows are matched on a key and the tool reports missing and extra keys, duplicate keys and per-column value differences, then writes a sign-off report with SHA-256 file fingerprints and every SQL statement used. Runs on DuckDB-WASM; nothing is uploaded.
+- [Test Data Generator](https://www.sqlparity.com/test-data-generator/): Generate realistic rows from a CREATE TABLE plus the edge cases that break loaders, APIs and queries — apostrophes, emoji, right-to-left text, the longest value a column allows, leap days, DST gaps, the largest number a type holds — each labelled with why it is there. Deterministic by seed. Output as dialect-correct SQL INSERTs, CSV or JSON Lines.
+- [Bulk SQL Converter](https://www.sqlparity.com/bulk-sql-converter/): Choose a folder of SQL files, a dbt project, or Excel/CSV files with SQL in their cells, and format, convert or review every query at once; results come back in the same format (a workbook as a workbook), named for the action. dbt Jinja is kept intact. Originals are never modified.
+- [Query Plan Visualizer](https://www.sqlparity.com/query-plan-visualizer/): Press Explain to see how a SQL query runs — each step of its EXPLAIN ANALYZE plan in plain words with rows produced, time taken and share of the total, the slowest step marked, and notes on row-by-row joins, wrong estimates and wasteful scans. Runs on local CSV or Parquet files in the browser.
 - [SQL Scratchpad](https://www.sqlparity.com/scratchpad/): Query local CSV, TSV, and Parquet files in-browser with analytical SQL using DuckDB-WASM. Zero file uploads.
-- [SQL Dialect Converter](https://www.sqlparity.com/sql-converter/): Translate queries between 16 database engines with transparent receipt logs of syntax changes and untranslated vendor functions.
+- [SQL Dialect Converter](https://www.sqlparity.com/sql-converter/): Translate queries between 16 database engines with transparent receipt logs of syntax changes and untranslated vendor functions. When the target is PostgreSQL, SQLite or DuckDB, the converted query runs on that real engine in the browser (PGlite, SQLite WASM, DuckDB-WASM), and when the source is one too, both queries run on the same sample tables and their results are compared.
 - [Schema Diff](https://www.sqlparity.com/schema-diff/): Compare two `CREATE TABLE` DDL statements or Elasticsearch index mappings with column-level structural diffing.
 - [Bulk Query Generator](https://www.sqlparity.com/bulk-query-generator/): Turn a SQL template and a column/table list into dozens of validated parity-check queries.
 - [SQL Formatter](https://www.sqlparity.com/sql-formatter/): Format SQL across 16 dialects with customizable keyword case, indent styles, and line breaks.

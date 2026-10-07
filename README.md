@@ -21,13 +21,17 @@ Try any tool live on [**sqlparity.com**](https://www.sqlparity.com):
 
 | Tool | Route | What it does |
 | :--- | :--- | :--- |
+| **Parity Run** | [`/parity-run`](https://www.sqlparity.com/parity-run) | Drop two copies of a table; get every missing key, duplicate and differing value counted, and a sign-off report |
+| **Test Data Generator** | [`/test-data-generator`](https://www.sqlparity.com/test-data-generator) | Realistic rows from a CREATE TABLE plus the edge cases that break code, as SQL INSERTs, CSV or JSON Lines |
+| **Bulk SQL Converter** | [`/bulk-sql-converter`](https://www.sqlparity.com/bulk-sql-converter) | Format, convert or review every SQL file in a folder or dbt project — and SQL kept in Excel or CSV cells; results come back in the same format |
+| **Query Plan Visualizer** | [`/query-plan-visualizer`](https://www.sqlparity.com/query-plan-visualizer) | Press Explain and read a query's plan as plain steps, with the slowest one marked |
 | **SQL Scratchpad** | [`/scratchpad`](https://www.sqlparity.com/scratchpad) | Drop in a CSV or Parquet file and query it with real SQL, via DuckDB compiled to WebAssembly |
 | **IN List Builder** | [`/in-list-builder`](https://www.sqlparity.com/in-list-builder) | Paste a column of values, get a properly quoted and escaped `IN (…)` clause |
 | **Bulk Query Generator** | [`/bulk-query-generator`](https://www.sqlparity.com/bulk-query-generator) | One template plus a list of fields, one query per field |
 | **Schema Diff** | [`/schema-diff`](https://www.sqlparity.com/schema-diff) | Compare two `CREATE TABLE` statements or two Elasticsearch index mappings |
 | **SQL Formatter** | [`/sql-formatter`](https://www.sqlparity.com/sql-formatter) | Format SQL for 16 dialects |
 | **Query Optimizer** | [`/query-optimizer`](https://www.sqlparity.com/query-optimizer) | Review a query for the patterns that make it scan more than it needs to |
-| **SQL Converter** | [`/sql-converter`](https://www.sqlparity.com/sql-converter) | Translate quoting, escaping, row limits and function names between dialects |
+| **SQL Converter** | [`/sql-converter`](https://www.sqlparity.com/sql-converter) | Translate quoting, escaping, row limits and function names between dialects, then run the result on real PostgreSQL, SQLite or DuckDB in the tab |
 
 ## Running it
 
@@ -72,13 +76,14 @@ and match the wrong rows.
 inside the tab. A dropped file is registered with `BROWSER_FILEREADER`, so the engine streams it
 straight off disk — a Parquet file larger than memory stays queryable and nothing is copied.
 
-Two decisions in [`scripts/copy-duckdb.mjs`](scripts/copy-duckdb.mjs) are worth keeping:
+Two decisions in [`scripts/copy-engines.mjs`](scripts/copy-engines.mjs) are worth keeping:
 
 - **Served from this origin, not a CDN.** The published bundles point at jsDelivr, which would be
   one line shorter and would also be the single outbound request this product claims not to make.
   The counter on the home page measures exactly that and would turn red.
 - **Copied at build time, not committed.** The runtime is 75 MB against a repository under half a
-  megabyte. `pnpm` reproduces it exactly from the lockfile, so `public/duckdb/` is gitignored.
+  megabyte. `pnpm` reproduces it exactly from the lockfile, so `public/duckdb/` and
+  `public/engines/` are gitignored.
 
 The `coi` bundle is deliberately absent: it needs COOP/COEP headers a static host may not let you
 set, and buys threads this workload does not need.
@@ -212,6 +217,108 @@ Two details that are easy to get wrong:
 
 [`public/_headers`](public/_headers) carries the same policy for hosts that read it, plus
 `frame-ancestors` and the other headers a meta tag cannot express.
+
+### Parity Run
+
+[`/parity-run`](https://www.sqlparity.com/parity-run) is the job the other tools prepare for:
+proving that two copies of a table hold the same data. Both exports are loaded into
+DuckDB in the tab as `parity_source` and `parity_target`, and every figure comes from a SQL
+statement built in [`lib/parity.ts`](lib/parity.ts):
+
+- **Rows matched on a key** (one or more columns). Reported: row counts, keys missing on each
+  side, duplicate and empty keys, and — over the matched row pairs — how many rows differ in
+  each column, with examples. Without a key, each side is compared as a multiset of rows with
+  `EXCEPT ALL`, which counts duplicates but cannot say which column changed.
+- **NULL equals NULL.** Comparisons use `IS DISTINCT FROM`. Numbers on both sides compare as
+  numbers, so `10.50` and `10.5` agree; columns whose types differ compare as text, and the
+  type change is shown separately.
+- **Relaxations are recorded.** Whitespace, case, empty-text-as-NULL and a numeric tolerance can
+  be switched on; each is listed in the result and the report. The tolerance carries a 1e-9
+  floating-point allowance, because `1840.50 - 1840.49` on a `DOUBLE` is `0.0100000000000477`.
+- **The verdict cannot overstate.** "Match" needs every check to pass *and* every column to be
+  compared; a column only on one side, or left out by choice, gives "Match on compared columns".
+
+The run itself is [`lib/parity-run.ts`](lib/parity-run.ts), which takes the engine as a function
+argument. The tests in [`tests/parity.test.ts`](tests/parity.test.ts) pass it DuckDB's own Node
+build, so the SQL behind a signed-off figure is exercised against the real engine, not a mock.
+
+**The sign-off report** ([`lib/parity-report.ts`](lib/parity-report.ts)) is one self-contained
+HTML file: verdict, both inputs identified by the SHA-256 of their bytes, every setting, every
+statement, and lines for a reviewer and approver. Anyone with the same two files can re-run and
+get the same numbers. Example values are real data, so they are left out unless included on
+purpose. The file runs no script and loads nothing, and prints cleanly to PDF.
+
+**Files that are not UTF-8.** DuckDB reads UTF-8 only, and Excel on Windows usually writes
+Windows-1252, so the first accented letter used to stop the load. When DuckDB reports a
+non-UTF-8 file, a UTF-8 copy is decoded in the tab (UTF-16 by its byte-order mark, otherwise
+Windows-1252) and read instead, with a note saying so. The scratchpad uses the same path.
+
+### Test data full of edge cases
+
+[`/test-data-generator`](https://www.sqlparity.com/test-data-generator) reads a `CREATE TABLE` with the same parser as
+schema diff, then [`lib/testdata.ts`](lib/testdata.ts) fills each column with values that respect its
+declared type — the longest string a `VARCHAR(n)` allows, the largest `DECIMAL(p,s)` — and walks it
+through the traps loaders fall into: quotes, backslashes, accents, right-to-left text, emoji, empty
+string next to NULL, leap days, daylight-saving gaps, the 32-bit time limit. Every edge value carries
+the reason it is there. Output is deterministic for a seed, so a failing row can be regenerated.
+
+The SQL output is written for the chosen dialect: its quoting and escaping, typed date literals where
+the engine will not cast a string (Oracle, Trino, BigQuery), numeric booleans where there is no
+`TRUE`, `N'…'` for non-ASCII text on SQL Server — without it SQL Server silently writes `?` — and one
+row per statement on Oracle. [`tests/testdata.test.ts`](tests/testdata.test.ts) loads the generated
+INSERTs into real PostgreSQL, SQLite and DuckDB and reads every value back.
+
+### Whole folders of SQL at once
+
+[`/bulk-sql-converter`](https://www.sqlparity.com/bulk-sql-converter) reads a folder in the tab — a repository's
+queries or a whole dbt project — and formats, converts or reviews every file with the same code as
+the single-query tools ([`lib/batch.ts`](lib/batch.ts)). Results download as a zip laid out like the
+folder; nothing is written over the originals. Dependency and build folders (`node_modules`,
+dbt's `target` and `dbt_packages`, `.git`) are skipped.
+
+Excel workbooks and CSV files are read too ([`lib/sheets.ts`](lib/sheets.ts)). Every cell that
+holds a statement — a keyword followed by SQL's shape, so "Select the rows below" is not one — is
+processed like a file, and the same workbook comes back with only those cells changed: a workbook
+is a zip of XML parts, and the new text is spliced into the sheet's XML as an inline string, so
+other cells, sheets, styles, formulas and macros are copied byte for byte. CSV fields are spliced
+the same way and keep their exact quoting. Results are named for the action
+(`formatted_report.sql`); in Chrome and Edge they can be written into a folder the person picks
+instead of downloaded as a zip.
+
+For the syntax check, dbt's `{{ … }}` expressions are replaced by a stand-in name with line breaks
+kept, so a reported line still points at the right line. A file with `{% … %}` control blocks is not
+syntax-checked at all, and says so: which branch is the real SQL depends on values only dbt knows.
+
+### A query plan you can read
+
+The scratchpad's **Explain** runs the query once with the engine's profiler on
+(`EXPLAIN (ANALYZE, FORMAT JSON)`) and [`lib/plan.ts`](lib/plan.ts) turns the result into steps with
+plain names, rows produced and each step's own share of the time. Column-only steps fold into the
+step below them unless asked for. It points out the slowest step, joins that compare every row with
+every row, estimates more than ten times off, and scans that read far more than they keep — and shows
+the query optimizer's findings for the same query alongside. Profiling executes the statement, so
+anything but a single statement that only reads is refused.
+
+### Running converted queries on real engines
+
+When the converter's target is PostgreSQL, SQLite or DuckDB, the converted query can be run for
+real in the tab — [PGlite](https://pglite.dev) (PostgreSQL compiled to WebAssembly), SQLite's
+official WebAssembly build, or DuckDB. When the source is one of the three as well, the original
+runs alongside it on the same sample tables and the two results are compared, as a multiset unless
+the query has a top-level `ORDER BY`, after normalising number, boolean and date formatting.
+
+The sample tables are guessed from the query by [`lib/engine-check.ts`](lib/engine-check.ts):
+tables from `FROM`/`JOIN` (not CTEs, subqueries or table functions), columns routed through
+aliases, and types from how each column is used — compared with a string, fed to `LENGTH`,
+compared with `CURRENT_TIMESTAMP`. The query's own literals become sample values, so its filters
+keep a row. The guess is shown as editable SQL, because a wrong guess must be fixable rather than
+read as a broken conversion.
+
+Isolation: PostgreSQL and DuckDB run each check inside a transaction that is always rolled back;
+SQLite cannot `ATTACH` inside a transaction, so it gets a fresh in-memory database per check.
+The engines load only when Run is pressed (PostgreSQL is about 16 MB), from this site — see
+[`scripts/copy-engines.mjs`](scripts/copy-engines.mjs). SQLite's ES module is served as a file
+rather than bundled, because it builds a Worker URL at runtime that a bundler cannot follow.
 
 ### Visitor analytics
 
@@ -391,7 +498,9 @@ pointer to the `.sql` download for the full text.
 | `write-excel-file` | `.xlsx` export (~19 KB gz) |
 | `fflate` | Zip for the numbered `.sql` set |
 | `dt-sql-parser` | ANTLR grammars behind query syntax checking (not DDL reading, which is `lib/ddl.ts`) |
-| `@duckdb/duckdb-wasm` | The scratchpad engine; lazy-loaded on that route only |
+| `@duckdb/duckdb-wasm` | The scratchpad and Parity Run engine; lazy-loaded on those routes only |
+| `@electric-sql/pglite` | PostgreSQL in WebAssembly, for the converter's real-engine check; loaded on Run |
+| `@sqlite.org/sqlite-wasm` | SQLite's official WebAssembly build, for the same check; loaded on Run |
 
 ## Not built yet
 

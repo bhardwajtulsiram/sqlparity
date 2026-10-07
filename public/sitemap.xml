@@ -16,6 +16,36 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.sqlparity.com/parity-run/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.sqlparity.com/test-data-generator/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.sqlparity.com/bulk-sql-converter/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.sqlparity.com/query-plan-visualizer/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.sqlparity.com/privacy/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.sqlparity.com/terms/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.sqlparity.com/scratchpad/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

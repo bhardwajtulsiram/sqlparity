@@ -28,6 +28,56 @@ function Svg({ className = 'size-4', children }: IconProps & { children: React.R
 
 /* ------------------------------------------------------------------ tools */
 
+/** Two equal bars and a tick: the parity mark, verified. */
+export function ParityIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 7.5h9.5M3 12.5h9.5" />
+      <path d="m13.8 10.2 1.8 1.8 3.4-3.8" />
+    </Svg>
+  );
+}
+
+/** Two equal bars struck through: the parity mark, broken. */
+export function NotEqualIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 7.5h12M4 12.5h12M13 4 7 16" />
+    </Svg>
+  );
+}
+
+/** A database cylinder: a real engine, running in the tab. */
+export function EngineIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <ellipse cx="10" cy="5" rx="6" ry="2.2" />
+      <path d="M4 5v10c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2V5" />
+      <path d="M4 10c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2" />
+    </Svg>
+  );
+}
+
+/** A page with a folded corner: the sign-off report. */
+export function ReportIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5.5 2.5h6l3.5 3.5v10a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 4 16V4a1.5 1.5 0 0 1 1.5-1.5Z" />
+      <path d="M11.5 2.5V6H15M7 10h6M7 13h4" />
+    </Svg>
+  );
+}
+
+/** A key, for the columns rows are matched on. */
+export function KeyIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="7" cy="12.5" r="3.5" />
+      <path d="m9.5 10 6.5-6.5M13.5 6l2 2M11.8 7.7l1.5 1.5" />
+    </Svg>
+  );
+}
+
 export function ScratchpadIcon(props: IconProps) {
   return (
     <Svg {...props}>
@@ -254,6 +304,73 @@ export function DownloadIcon(props: IconProps) {
     <Svg {...props}>
       <path d="M10 3.5V13M6 9l4 4 4-4" />
       <path d="M3.5 12.5v2a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-2" />
+    </Svg>
+  );
+}
+
+/** A table with a spark: rows made up on purpose. */
+export function TestDataIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="3.5" width="11" height="13" rx="2" />
+      <path d="M2.5 8h11M2.5 12.5h11M7 3.5v13" />
+      <path d="M16.5 3v3M15 4.5h3M16.5 12v4M14.5 14h4" />
+    </Svg>
+  );
+}
+
+/** A folder: a whole directory of files at once. */
+export function FolderIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 6A1.5 1.5 0 0 1 4 4.5h3.6l1.8 2H16A1.5 1.5 0 0 1 17.5 8v7A1.5 1.5 0 0 1 16 16.5H4A1.5 1.5 0 0 1 2.5 15Z" />
+      <path d="M6 11h8M6 13.5h5" />
+    </Svg>
+  );
+}
+
+/** Branching steps: a query plan. */
+export function PlanIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="7.5" y="2.5" width="5" height="4" rx="1" />
+      <rect x="2.5" y="13.5" width="5" height="4" rx="1" />
+      <rect x="12.5" y="13.5" width="5" height="4" rx="1" />
+      <path d="M10 6.5v3.5M5 13.5V11.5h10v2" />
+    </Svg>
+  );
+}
+
+export function MenuIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 6h13M3.5 10h13M3.5 14h13" />
+    </Svg>
+  );
+}
+
+export function GlobeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="10" cy="10" r="7.5" />
+      <path d="M2.5 10h15M10 2.5c2.2 2.4 2.2 12.6 0 15M10 2.5c-2.2 2.4-2.2 12.6 0 15" />
+    </Svg>
+  );
+}
+
+export function CodeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m7 6-4 4 4 4M13 6l4 4-4 4" />
+    </Svg>
+  );
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="9" width="12" height="8.5" rx="2" />
+      <path d="M6.8 9V6.5a3.2 3.2 0 0 1 6.4 0V9" />
     </Svg>
   );
 }

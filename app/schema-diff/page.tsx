@@ -3,7 +3,7 @@ import { SchemaDiffTool } from '@/components/SchemaDiffTool';
 import { ToolFaqSection } from '@/components/ToolFaqSection';
 
 export const metadata: Metadata = {
-  title: 'Schema diff',
+  title: 'Schema Diff — Compare Two CREATE TABLE Statements or Index Mappings',
   description:
     'Paste two CREATE TABLE statements and see exactly which columns were added, removed, or changed type — then generate correctness checks for only what changed.',
   alternates: {
@@ -22,7 +22,7 @@ const STEPS = [
     step: 2,
     title: 'Paste Target DDL',
     description:
-      'Paste your updated, migrated, or destination CREATE TABLE definition into the second editor panel.',
+      'Paste your updated or destination CREATE TABLE definition into the second editor panel.',
   },
   {
     step: 3,

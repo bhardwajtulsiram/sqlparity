@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import './globals.css';
+import { contentSecurityPolicy } from '@/lib/csp';
 import { SiteAnalytics } from '@/components/SiteAnalytics';
 import { SiteFooter } from '@/components/SiteFooter';
 import { SiteHeader } from '@/components/SiteHeader';
@@ -33,52 +34,13 @@ const mono = IBM_Plex_Mono({
 });
 
 /**
- * Content Security Policy, shipped with the page.
- *
- * The product's claim is that nothing you paste leaves the tab. That is true because
- * of how the code is written — but "true because I wrote it carefully" is a weaker
- * guarantee than "the browser will not permit otherwise". `connect-src 'self'` is the
- * directive that matters: it forbids this page from opening a request to any other
- * origin, so a dependency that turned malicious in some future update still could not
- * send a schema anywhere. The claim stops depending on my diligence.
- *
- * Two allowances are deliberate and worth knowing about:
- *
- *   'wasm-unsafe-eval'  DuckDB is WebAssembly, and compiling it needs this. It permits
- *                       WASM compilation only, not JavaScript eval.
- *   'unsafe-inline'     Next inlines its hydration data as a script tag, and a static
- *                       export has no server to mint a nonce per request. This weakens
- *                       the cross-site-scripting protection, which matters less here
- *                       than usual: nothing in this app ever renders user input as
- *                       markup, so there is no injection point to exploit.
- *
- * Set as a meta tag because a static export has no server to send headers, and it must
- * be http-equiv — Next's `metadata.other` emits name=, which browsers ignore for this.
- * public/_headers carries the same policy for hosts that read it, plus the directives
- * a meta tag cannot express.
+ * The Content Security Policy, as a <meta> tag so it applies on any host — a static
+ * export has no server to send headers. It must be http-equiv: Next's
+ * `metadata.other` emits name=, which browsers ignore for this. The policy itself,
+ * and why each directive is there, lives in lib/csp.ts; vercel.json sends the same
+ * policy as a header, plus frame-ancestors, which a meta tag cannot carry.
  */
-/**
- * React needs eval() in development for its debugging features — reconstructing a
- * component stack from another environment, mainly — and never in production. Relaxing
- * only this one directive, only in development, keeps the rest of the policy in force
- * locally: connect-src 'self' is the line that enforces the product's claim, and it is
- * worth being able to test that on the dev server rather than only after a build.
- */
-const DEV_EVAL = process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'";
-
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  `script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'${DEV_EVAL}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  // The one that enforces the promise.
-  "connect-src 'self'",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'none'",
-].join('; ');
+const CONTENT_SECURITY_POLICY = contentSecurityPolicy({ dev: process.env.NODE_ENV !== 'production' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.sqlparity.com'),
@@ -97,7 +59,7 @@ export const metadata: Metadata = {
     'SQL dialect converter',
     'SQL schema diff',
     'bulk validation queries',
-    'DuckDB in browser',
+    'query CSV in browser',
     'query parquet online',
     'SQL IN list builder',
     'SQL formatter 16 dialects',
@@ -108,7 +70,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'SQLParity — SQL tools that never see your data',
     description:
-      'Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing, formatting, DuckDB scratchpad, and dialect conversion. 100% computed in-browser.',
+      'Browser-only SQL tools for data-migration verification: bulk query generation, schema diffing, formatting, an in-browser SQL scratchpad, and dialect conversion. 100% computed in-browser.',
     url: 'https://www.sqlparity.com',
     siteName: 'SQLParity',
     locale: 'en_US',
@@ -145,7 +107,7 @@ const JSON_LD_DATA = {
   name: 'SQLParity',
   url: 'https://www.sqlparity.com',
   description:
-    'Client-side, privacy-first SQL utilities for schema diffing, bulk validation queries, DuckDB in-tab querying, and dialect conversion.',
+    'Client-side, privacy-first SQL utilities for schema diffing, bulk validation queries, in-tab file querying, and dialect conversion.',
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'All',
   browserRequirements: 'Requires JavaScript, WASM support',

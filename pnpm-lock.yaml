@@ -35,9 +35,15 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: 1.33.1-dev57.0
         version: 1.33.1-dev57.0
+      '@electric-sql/pglite':
+        specifier: ^0.5.8
+        version: 0.5.8
       '@lezer/highlight':
         specifier: 1.2.3
         version: 1.2.3
+      '@sqlite.org/sqlite-wasm':
+        specifier: 3.53.4-build2
+        version: 3.53.4-build2
       '@vercel/analytics':
         specifier: ^2.0.1
         version: 2.0.1(next@16.3.4(@types/node@26.5.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
@@ -120,6 +126,9 @@ packages:
 
   '@duckdb/duckdb-wasm@1.33.1-dev57.0':
     resolution: {integrity: sha512-ndn5l2EHq1PEMvCg8G6lRV0vjhSUcbqdM/niNBTTqH4/PyyUUVKbge0uUyCnj27b9SF/CiqBwDsgKLTqBvaxdw==}
+
+  '@electric-sql/pglite@0.5.8':
+    resolution: {integrity: sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q==}
 
   '@emnapi/runtime@1.11.3':
     resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
@@ -473,6 +482,10 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@sqlite.org/sqlite-wasm@3.53.4-build2':
+    resolution: {integrity: sha512-kQVArGJA4z7s56Dm8t+eTBXad4LiohuVj9pfgDNOcxa+Ic5xMrWlLPTq6cT0hw5S4MIvtpsraW+B0wD+IPvC7A==}
+    engines: {node: '>=22'}
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
@@ -1479,6 +1492,8 @@ snapshots:
       apache-arrow: 17.0.0
       qs: 6.16.0
 
+  '@electric-sql/pglite@0.5.8': {}
+
   '@emnapi/runtime@1.11.3':
     dependencies:
       tslib: 2.8.1
@@ -1702,6 +1717,8 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@sqlite.org/sqlite-wasm@3.53.4-build2': {}
 
   '@swc/helpers@0.5.23':
     dependencies:

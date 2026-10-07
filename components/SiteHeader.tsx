@@ -4,18 +4,21 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette';
-import { OverviewIcon, ParityMark, SearchIcon } from '@/components/icons';
-import { TOOLS } from '@/components/tools';
-import { useExternalRequestCount } from '@/lib/network';
+import { ParityMark, SearchIcon } from '@/components/icons';
+import { MobileMenu } from '@/components/MobileMenu';
+import { PrivacyReading, SITE_LINKS } from '@/components/SiteNav';
+import { ToolsMenu } from '@/components/ToolsMenu';
 
-const TABS = [{ href: '/', label: 'Overview', Icon: OverviewIcon }, ...TOOLS];
+const GITHUB = 'https://github.com/bhardwajtulsiram/sqlparity';
 
 /**
- * Two tiers: identity and the privacy reading on top, the tools as tabs underneath.
+ * One row: identity, the Tools menu and the site's pages, then search, the privacy
+ * reading and GitHub.
  *
- * Seven tools and a wordmark do not fit one row at laptop widths without the labels
- * shrinking to guesswork, and the tabs are the thing people use most — so they get a
- * row of their own, which can scroll sideways on a phone rather than wrap into three.
+ * Tools used to be a row of tabs of their own. At eight that row no longer fitted a
+ * laptop, and every tool added would have pushed another off-screen, so they moved
+ * into a single menu grouped by job. Below the desktop breakpoint the whole set
+ * collapses into a sheet behind one button.
  */
 export function SiteHeader() {
   const pathname = usePathname();
@@ -27,142 +30,69 @@ export function SiteHeader() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--border-card)] bg-[var(--surface-card)]/80 backdrop-blur-xl backdrop-saturate-150">
-      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-4 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="SQLParity home">
-          <ParityMark className="size-7" />
-          <span className="text-[17px] font-semibold tracking-tight">SQLParity</span>
+    <header className="sticky top-0 z-40 border-b border-[var(--border-card)] bg-[var(--surface-card)]/85 backdrop-blur-xl backdrop-saturate-150">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-4 px-4 sm:px-6 lg:gap-6">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="SQLParity home">
+          <ParityMark className="size-8" />
+          <span className="text-[17.5px] font-semibold tracking-tight">SQLParity</span>
         </Link>
 
-        <div className="ml-auto flex items-center gap-2.5">
-          <nav className="flex items-center gap-1 sm:gap-2 mr-1" aria-label="Quick links">
-            <Link
-              href="/about/"
-              className={`rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-                pathname === '/about/'
-                  ? 'text-accent-600 dark:text-accent-400 bg-accent-500/10'
-                  : 'text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'
-              }`}
-            >
-              About
-            </Link>
-            <Link
-              href="/faq/"
-              className={`rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-                pathname === '/faq/'
-                  ? 'text-accent-600 dark:text-accent-400 bg-accent-500/10'
-                  : 'text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'
-              }`}
-            >
-              FAQ
-            </Link>
-            <a
-              href="https://github.com/bhardwajtulsiram/sqlparity"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="GitHub repository"
-              className="rounded-lg p-1.5 text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100 transition-colors hidden sm:inline-flex"
-              title="View on GitHub"
-            >
-              <svg className="size-4 fill-current" viewBox="0 0 24 24">
-                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-              </svg>
-            </a>
-          </nav>
+        <nav aria-label="Main" className="hidden items-center gap-0.5 lg:flex">
+          <ToolsMenu />
+          {SITE_LINKS.map((link) => {
+            const active = link.href !== '/#how' && pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? 'page' : undefined}
+                className={`flex h-9 items-center rounded-lg px-3 text-[14px] font-medium whitespace-nowrap transition-colors ${
+                  active
+                    ? 'bg-accent-500/10 text-accent-700 dark:text-accent-300'
+                    : 'text-ink-600 hover:bg-ink-900/[0.05] hover:text-ink-900 dark:text-ink-300 dark:hover:bg-white/[0.06] dark:hover:text-white'
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </nav>
 
+        <div className="ml-auto flex items-center gap-2.5">
           <button
             type="button"
             onClick={() => palette.setOpen(true)}
-            aria-label="Go to a tool"
+            aria-label="Search tools"
             aria-keyshortcuts="Control+K Meta+K"
-            className="flex h-9 items-center gap-2 rounded-lg border border-[var(--border-card)] bg-[var(--surface-card)] pr-1.5 pl-2.5 text-[13px] text-ink-500 shadow-[var(--shadow-control)] transition-colors hover:border-[var(--border-strong)] hover:text-ink-700 sm:w-56 dark:text-ink-400 dark:hover:text-ink-200"
+            className="flex size-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-card)] bg-[var(--surface-card)] text-[13px] text-ink-500 shadow-[var(--shadow-control)] transition-colors hover:border-[var(--border-strong)] hover:text-ink-700 sm:h-9 sm:w-44 sm:justify-start sm:pr-1.5 sm:pl-2.5 xl:w-48 dark:text-ink-400 dark:hover:text-ink-200"
           >
             <SearchIcon className="size-4 shrink-0" />
-            <span className="hidden sm:inline">Go to a tool</span>
+            <span className="hidden sm:inline">Search tools</span>
             <kbd className="ml-auto hidden rounded-md border border-[var(--border-card)] bg-[var(--surface-header)] px-1.5 font-mono text-[11px] leading-5 sm:block">
               {mac ? '⌘' : 'Ctrl'} K
             </kbd>
           </button>
 
           <PrivacyReading />
+
+          <a
+            href={GITHUB}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="SQLParity on GitHub"
+            title="View on GitHub"
+            className="hidden size-9 items-center justify-center rounded-lg text-ink-500 transition-colors hover:bg-ink-900/[0.05] hover:text-ink-900 sm:flex dark:text-ink-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          >
+            <svg className="size-[19px] fill-current" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2C6.5 2 2 6.5 2 12c0 4.4 2.9 8.2 6.8 9.5.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.6 0 0 .8-.3 2.8 1A9.6 9.6 0 0 1 12 6.8c.9 0 1.7.1 2.5.3 1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.6.6.7 1 1.6 1 2.7 0 3.8-2.3 4.7-4.6 4.9.4.3.7.9.7 1.9v2.7c0 .3.2.6.7.5A10 10 0 0 0 22 12c0-5.5-4.5-10-10-10Z" />
+            </svg>
+          </a>
+
+          <MobileMenu onSearch={() => palette.setOpen(true)} />
         </div>
       </div>
 
-      <nav aria-label="Tools" className="mx-auto w-full max-w-7xl px-2 sm:px-4">
-        <ul className="-mb-px flex overflow-x-auto [scrollbar-width:none]">
-          {TABS.map((tab) => {
-            const active = pathname === tab.href;
-            return (
-              <li key={tab.href} className="shrink-0">
-                <Link
-                  href={tab.href}
-                  aria-current={active ? 'page' : undefined}
-                  className={`group relative flex h-11 items-center gap-2 px-3 text-[13.5px] font-medium transition-colors ${
-                    active
-                      ? 'text-ink-900 dark:text-white'
-                      : 'text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'
-                  }`}
-                >
-                  <tab.Icon
-                    className={`size-4 ${
-                      active
-                        ? 'text-accent-600 dark:text-accent-400'
-                        : 'text-ink-400 group-hover:text-ink-600 dark:text-ink-500 dark:group-hover:text-ink-300'
-                    }`}
-                  />
-                  {tab.label}
-                  <span
-                    aria-hidden="true"
-                    className={`absolute inset-x-2 bottom-0 h-[2px] rounded-full transition-colors ${
-                      active ? 'bg-accent-600 dark:bg-accent-400' : 'group-hover:bg-ink-300 dark:group-hover:bg-ink-700'
-                    }`}
-                  />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
       <CommandPalette open={palette.open} onClose={() => palette.setOpen(false)} />
     </header>
-  );
-}
-
-/**
- * The privacy claim as a reading rather than a slogan: how many requests this page
- * has sent to another server, counted by the browser, updated live.
- */
-function PrivacyReading() {
-  const external = useExternalRequestCount();
-  const clean = external === null || external === 0;
-
-  return (
-    <span
-      className={`hidden h-9 items-center gap-2 rounded-lg border px-3 text-[12.5px] md:flex ${
-        clean
-          ? 'border-[color-mix(in_oklab,var(--signal)_30%,transparent)] bg-[var(--signal-soft)]'
-          : 'border-red-500/40 bg-red-500/10'
-      }`}
-      title="Counted from this page's own network timeline, live"
-    >
-      <span
-        aria-hidden="true"
-        className={`live-dot size-1.5 rounded-full ${clean ? 'text-[var(--signal)]' : 'text-red-500'}`}
-        style={{ background: 'currentColor' }}
-      />
-      <span className="text-ink-600 dark:text-ink-300">Runs in this tab</span>
-      {external !== null && (
-        <span
-          className={`border-l pl-2 font-mono font-semibold ${
-            clean
-              ? 'border-[color-mix(in_oklab,var(--signal)_30%,transparent)] text-[color-mix(in_oklab,var(--signal)_80%,black)] dark:text-[var(--signal)]'
-              : 'border-red-500/40 text-red-700 dark:text-red-400'
-          }`}
-        >
-          {external} sent
-        </span>
-      )}
-    </span>
   );
 }

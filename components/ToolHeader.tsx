@@ -1,4 +1,6 @@
-import { getTool } from '@/components/tools';
+import Link from 'next/link';
+import { ChevronIcon } from '@/components/icons';
+import { getGroup, getTool, toolsIn } from '@/components/tools';
 
 /**
  * The top of every tool page: what the tool is, then the few choices that change what
@@ -27,9 +29,53 @@ export function ToolHeader({
   footer?: React.ReactNode;
 }) {
   const tool = getTool(href);
+  const group = getGroup(tool.group);
+  const siblings = toolsIn(tool.group).filter((t) => t.href !== tool.href);
 
   return (
     <div className="space-y-5">
+      {/* Where this tool sits, and the others that do the same kind of job. With the
+          tools in one header menu, this is the quick way between related ones. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12.5px]">
+        <nav aria-label="Breadcrumb">
+          <ol className="flex items-center gap-1.5 text-ink-500 dark:text-ink-400">
+            <li>
+              <Link href="/#tools" className="hover:text-ink-900 dark:hover:text-ink-100">
+                Tools
+              </Link>
+            </li>
+            <li aria-hidden="true">
+              <ChevronIcon className="size-3 text-ink-300 dark:text-ink-600" />
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="size-1.5 rounded-[2px]" style={{ background: group.color }} />
+              {group.name}
+            </li>
+            <li aria-hidden="true">
+              <ChevronIcon className="size-3 text-ink-300 dark:text-ink-600" />
+            </li>
+            <li aria-current="page" className="font-medium text-ink-800 dark:text-ink-200">
+              {tool.name}
+            </li>
+          </ol>
+        </nav>
+        {siblings.length > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <span className="text-ink-400 dark:text-ink-500">Also for this job</span>
+            {siblings.map((s) => (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--border-card)] bg-[var(--surface-card)] px-2.5 font-medium text-ink-600 shadow-[var(--shadow-control)] transition-colors hover:border-[var(--border-strong)] hover:text-ink-900 dark:text-ink-300 dark:hover:text-white"
+              >
+                <s.Icon className="size-3.5" />
+                {s.name}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
         <div className="flex min-w-0 items-center gap-4">
           <span

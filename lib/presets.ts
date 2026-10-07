@@ -254,7 +254,7 @@ WHERE ${where.join('\n  AND ')}`;
     ],
     combine: { default: { header: '', separator: '\nUNION ALL\n', footer: '' } },
     unavailable: {
-      hive: 'Hive has no information_schema, so column lists cannot be queried with SQL. Run DESCRIBE on both tables and compare them in the schema diff instead.',
+      hive: 'Hive has no information_schema, so column lists cannot be queried with SQL. Run DESCRIBE on both tables and compare them in Schema Diff instead.',
     },
   },
   {

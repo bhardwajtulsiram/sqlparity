@@ -132,6 +132,9 @@
 body {
   background: var(--surface-page);
   color: var(--color-ink-900);
+  /* Full-bleed bands are 100vw wide, which includes the scrollbar on Windows. Clip
+     rather than hide, so the sticky header keeps working. */
+  overflow-x: clip;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -272,4 +275,91 @@ select {
 
 .animate-fade {
   animation: fade-in 140ms ease-out;
+}
+
+/* ------------------------------------------------------------ documents */
+
+/* Body text for the Privacy, Terms and Security pages. */
+.doc-prose {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-ink-700);
+  max-width: 46rem;
+}
+.doc-prose > * + * {
+  margin-top: 0.9rem;
+}
+.doc-prose h3 {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--color-ink-900);
+  margin-top: 1.5rem;
+}
+.doc-prose ul,
+.doc-prose ol {
+  padding-left: 1.25rem;
+}
+.doc-prose ul {
+  list-style: disc;
+}
+.doc-prose ol {
+  list-style: decimal;
+}
+.doc-prose li + li {
+  margin-top: 0.35rem;
+}
+.doc-prose li::marker {
+  color: var(--color-ink-400);
+}
+.doc-prose a {
+  color: var(--color-accent-700);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--color-accent-500) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.doc-prose a:hover {
+  text-decoration-color: var(--color-accent-500);
+}
+.doc-prose strong {
+  font-weight: 600;
+  color: var(--color-ink-900);
+}
+.doc-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-card);
+}
+.doc-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.doc-prose th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--color-ink-500);
+  background: var(--surface-header);
+  padding: 0.5rem 0.75rem;
+}
+.doc-prose td {
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--border-card);
+  vertical-align: top;
+}
+
+@media (prefers-color-scheme: dark) {
+  .doc-prose {
+    color: var(--color-ink-300);
+  }
+  .doc-prose h3,
+  .doc-prose strong {
+    color: var(--color-ink-100);
+  }
+  .doc-prose a {
+    color: var(--color-accent-400);
+  }
 }

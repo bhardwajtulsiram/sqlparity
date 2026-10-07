@@ -1,0 +1,6 @@
+Contact: mailto:contact@sqlparity.com
+Contact: mailto:bhardwajtulsiram@gmail.com
+Expires: 2027-10-07T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.sqlparity.com/.well-known/security.txt
+Policy: https://github.com/bhardwajtulsiram/sqlparity/blob/main/SECURITY.md

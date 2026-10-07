@@ -117,7 +117,7 @@ export default async function ConverterPairPage({
         <div className="rounded-xl border border-[var(--border-card)] bg-[var(--surface-sunken)] p-5">
           <h3 className="text-sm font-semibold text-ink-900 dark:text-white">Why In-Browser SQL Conversion Matters</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-600 dark:text-ink-400">
-            Database migrations frequently involve proprietary business logic, sensitive table schemas, and production column names. When converting SQL between {from.label} and {to.label}, SQLParity executes all parsing, tokenization, and code rewriting locally in your browser. Zero queries or schemas are transmitted to remote servers.
+            The SQL you convert often holds proprietary business logic, sensitive table schemas, and production column names. When converting SQL between {from.label} and {to.label}, SQLParity executes all parsing, tokenization, and code rewriting locally in your browser. Zero queries or schemas are transmitted to remote servers.
           </p>
         </div>
 

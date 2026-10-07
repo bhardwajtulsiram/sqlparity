@@ -3,7 +3,7 @@ import { SqlFormatterTool } from '@/components/SqlFormatterTool';
 import { ToolFaqSection } from '@/components/ToolFaqSection';
 
 export const metadata: Metadata = {
-  title: 'SQL formatter',
+  title: 'SQL Formatter — Format SQL for 16 Dialects',
   description:
     'Format SQL for PostgreSQL, MySQL, SQL Server, Oracle, Snowflake, BigQuery, Athena and more — keyword case, indentation, line width, leading or trailing commas. Runs entirely in your browser.',
   alternates: {
@@ -39,7 +39,7 @@ const FAQS = [
       'Leading commas (placing commas at the beginning of each selected line) make it easy to comment out or reorder columns in code without leaving a trailing syntax error. SQLParity supports both styles with one toggle.',
   },
   {
-    question: 'Does the formatter validate syntax as I type?',
+    question: 'Does the SQL Formatter validate syntax as I type?',
     answer:
       'Yes. SQLParity runs dialect-specific validation checks as you type to highlight syntax mistakes, unclosed parentheses, and unescaped quotes before you run the query.',
   },

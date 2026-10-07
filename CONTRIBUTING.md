@@ -30,10 +30,10 @@ cd sqlparity
 pnpm install
 ```
 
-### 3. Copy DuckDB WASM Assets
-DuckDB-WASM requires its WebAssembly and worker bundles copied into `public/duckdb/`. This is handled automatically before `dev` and `build`, or you can run it manually:
+### 3. Copy the In-Browser Database Engines
+DuckDB, PostgreSQL (PGlite) and SQLite run in the browser from WebAssembly files served by this site. They are copied into `public/duckdb/` and `public/engines/` automatically before `dev` and `build`, or you can run it manually:
 ```bash
-node scripts/copy-duckdb.mjs
+node scripts/copy-engines.mjs
 ```
 
 ### 4. Start the Dev Server

@@ -6,6 +6,7 @@ import { DEFAULT_DIALECT_ID, getDialect } from '@/lib/dialects';
 import { usePersistentState } from '@/lib/settings';
 import { decodeShareState } from '@/lib/share';
 import { ShareButton } from '@/components/ShareButton';
+import { EngineCheckPanel } from '@/components/EngineCheckPanel';
 import { SqlEditor } from '@/components/SqlEditor';
 import { ToolHeader } from '@/components/ToolHeader';
 import { ArrowRightIcon, EraseIcon, SparkIcon, SwapIcon } from '@/components/icons';
@@ -147,6 +148,8 @@ export function SqlConverterTool({ initialFromId, initialToId }: SqlConverterToo
           <SqlEditor value={result.sql} readOnly dialectId={toId} minHeight="40vh" />
         </Panel>
       </div>
+
+      <EngineCheckPanel fromId={fromId} toId={toId} sourceSql={input} targetSql={result.sql} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel title="What it changed">

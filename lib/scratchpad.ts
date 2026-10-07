@@ -105,6 +105,29 @@ export function describeCsvFailure(message: string): string | null {
   return `line ${Number(line).toLocaleString()} has "${value}" in ${column}, which does not fit the ${type ?? 'type'} guessed from the rows above it`;
 }
 
+/** True when DuckDB refused a CSV because its bytes are not UTF-8. */
+export function isEncodingError(message: string): boolean {
+  return /invalid unicode|not utf-8 encoded/i.test(message);
+}
+
+/**
+ * Decode a file that is not UTF-8, and say which encoding was assumed.
+ *
+ * A byte-order mark settles UTF-16. Anything else is read as Windows-1252, which is
+ * what Excel and most Windows tools write when they do not write UTF-8: it is a
+ * superset of Latin-1 for every printable character, and also gets the curly quotes
+ * and euro sign right where Latin-1 would turn them into control characters.
+ */
+export function decodeLegacyText(bytes: Uint8Array): { text: string; encoding: string } {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return { text: new TextDecoder('utf-16le').decode(bytes), encoding: 'UTF-16' };
+  }
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return { text: new TextDecoder('utf-16be').decode(bytes), encoding: 'UTF-16' };
+  }
+  return { text: new TextDecoder('windows-1252').decode(bytes), encoding: 'Windows-1252 (Western European)' };
+}
+
 /** Plain words for a date format, when day and month could be read either way round. */
 export function ambiguousDateFormat(format: string | null | undefined): string | null {
   if (!format) return null;

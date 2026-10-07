@@ -27,6 +27,7 @@
 ### 2.2 SQL Dialect Converter (/sql-converter/)
 - **Dialects Supported:** 16 engines (PostgreSQL, MySQL, SQLite, T-SQL, Oracle, MariaDB, Snowflake, BigQuery, Redshift, Trino/Athena, Spark SQL, Hive, ClickHouse, DuckDB, IBM Db2, ANSI SQL).
 - **Conversion Philosophy ("Receipts, Not Guesses"):** Translates syntax constructs (identifier quoting, backslash string escaping, `LIMIT`/`OFFSET` vs `TOP` vs `FETCH FIRST`, string concatenation, common functions like `IFNULL`/`NVL`/`COALESCE`, `NOW`/`CURRENT_TIMESTAMP`, `LENGTH`/`LEN`). When a function has incompatible signatures or dialect-specific side-effects, it is intentionally marked as unconverted in a receipt list rather than guessed.
+- **Real-engine check:** When the target is PostgreSQL, SQLite or DuckDB, the converted query runs on that real engine in the tab (`@electric-sql/pglite`, `@sqlite.org/sqlite-wasm`, `@duckdb/duckdb-wasm`) against editable sample tables inferred from the query. When the source is one of the three too, the original runs on the same data and the results are compared (multiset, or ordered when the query has a top-level `ORDER BY`). Each check is isolated: rolled-back transaction for PostgreSQL and DuckDB, a fresh in-memory database for SQLite.
 
 ### 2.3 Schema Diff (/schema-diff/)
 - **Parsers:** Client-side DDL parser (`lib/ddl.ts`) and Elasticsearch index mapping reader (`lib/es-mapping.ts`).
@@ -52,6 +53,29 @@
   - `SELECT *` in production analytical queries.
   - Cartesian joins / cross joins without join keys.
   - `COUNT(DISTINCT)` scale warnings.
+
+### 2.8 Parity Run (/parity-run/)
+- **Purpose:** Prove two copies of a table hold the same data (pipeline before and after, replica and primary, source and migrated copy).
+- **Inputs:** Two local files (CSV, TSV, Parquet, JSON), loaded into DuckDB-WASM in the tab. Files that are not UTF-8 are decoded in the tab (UTF-16 by byte-order mark, otherwise Windows-1252).
+- **Matching:** On one or more key columns (a unique, identifier-named column is suggested), or with no key as row multisets via `EXCEPT ALL`. Columns pair by name across case and punctuation changes, and can be re-paired by hand.
+- **Measures:** Row counts, keys only in the source or target, duplicate and empty keys, and per-column differing-row counts over matched pairs with examples. NULL equals NULL; numeric pairs compare numerically.
+- **Options:** Ignore whitespace, ignore case, empty text as NULL, numeric tolerance. Every relaxation is recorded.
+- **Verdicts:** Match, Match on compared columns (some columns not compared), Differences found.
+- **Sign-off report:** Self-contained HTML with the verdict, SHA-256 fingerprints of both input files, settings, every SQL statement, and reviewer and approver lines. Example values are excluded unless chosen. Markdown summary for tickets.
+
+### 2.9 Test Data Generator (/test-data-generator/)
+- **Input:** A CREATE TABLE in any of the 16 dialects; column types, lengths, precision, scale and NOT NULL are read from it.
+- **Edge cases:** Text (apostrophes, quotes, backslashes, accents, CJK, right-to-left, emoji, padding, empty string versus NULL, the word NULL, embedded newlines and tabs, leading zeros, the longest allowed value, multi-byte values at the character limit); numbers (zero, negative, type minimum and maximum, decimal precision limits); dates and times (leap day, Unix epoch, 32-bit limit, DST gap and overlap). Each value carries its reason.
+- **Keys:** Identifier-named columns stay unique; text keys get a case-only near-duplicate.
+- **Output:** SQL INSERT statements per dialect (typed date literals where required, numeric booleans where needed, N-prefixed Unicode on SQL Server, one row per statement on Oracle), RFC 4180 CSV, JSON Lines. Deterministic for a given seed.
+
+### 2.10 Bulk SQL Converter (/bulk-sql-converter/)
+- **Input:** A folder (or several files) read in the browser: SQL files, plus Excel (.xlsx, .xlsm) and CSV/TSV files, whose cells are scanned for SQL statements (prose that starts with a keyword and formula cells are left alone; .xls is not read). Dependency and build folders (node_modules, target, dbt_packages, .git), SQL files over 1 MB and spreadsheets over 25 MB are skipped.
+- **Actions:** Format every file with the formatter's settings; convert every file between dialects; or review every file with the optimizer rules, safety checks and a syntax check. dbt `{{ }}` expressions are kept and stood in for during the syntax check; files with `{% %}` control blocks skip the syntax check.
+- **Output:** Named for the action (report.sql formatted downloads as formatted_report.sql). One file comes back as that file; a workbook or CSV comes back in its own format with only its SQL cells rewritten (styles, other cells, formulas and macros untouched); a folder comes back as a zip, or is written into a new sub-folder of a folder the user picks (Chrome and Edge, File System Access API), that mirrors its layout (optionally only changed files), with file names inside kept so dbt refs and includes still resolve. A review downloads as CSV or Markdown. Files on disk are never modified.
+
+### 2.11 Query Plan Visualizer (/query-plan-visualizer/), also in the Scratchpad
+- **Explain:** Runs a single read-only query once with profiling on and draws the plan as readable steps — rows produced, time spent and share of the total for each step — with the slowest step marked, column-only steps folded, and notes on nested-loop joins, wildly wrong row estimates and scans that read far more than they keep. Statements that change data are refused, because profiling executes them.
 
 ### 2.7 IN List Builder (/in-list-builder/)
 - **Parsing:** Automatic separator detection (newlines, commas, tabs, spreadsheet columns).

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { ArrowRightIcon, OverviewIcon, SearchIcon } from '@/components/icons';
 import { TOOLS } from '@/components/tools';
@@ -90,7 +91,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     router.push(href);
   };
 
-  return (
+  // Portalled to <body>. The palette is opened from the header, and the header's
+  // backdrop-filter makes it the containing block for fixed-position children — so
+  // rendered in place, the "full-screen" overlay was only as tall as the header, and
+  // a click on the page below it never reached the handler that closes it.
+  return createPortal(
     <div
       className="animate-fade fixed inset-0 z-50 flex items-start justify-center bg-ink-950/45 px-4 pt-[12vh] backdrop-blur-[3px]"
       onMouseDown={(e) => {
@@ -200,7 +205,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           </span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

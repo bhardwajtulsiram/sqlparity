@@ -2,8 +2,10 @@ import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import {
   ambiguousDateFormat,
   arrowConverter,
+  decodeLegacyText,
   decimalCommaColumns,
   describeCsvFailure,
+  isEncodingError,
   isReadOnlyQuery,
   loadSql,
   quoteName,
@@ -23,7 +25,7 @@ import {
  *
  * The published bundles point at jsDelivr, and using them would be one line shorter
  * and would also be the single outbound request this product promises not to make.
- * scripts/copy-duckdb.mjs puts the runtime under public/duckdb instead, and the paths
+ * scripts/copy-engines.mjs puts the runtime under public/duckdb instead, and the paths
  * below are same-origin and relative — so the engine loads under the same rule as
  * everything else here, and the home page's request counter stays honest.
  *
@@ -55,7 +57,7 @@ async function start(): Promise<AsyncDuckDB> {
   const duckdb = await import('@duckdb/duckdb-wasm');
 
   const bundle = await duckdb.selectBundle(BUNDLES);
-  if (!bundle.mainWorker) throw new Error('This browser cannot run the DuckDB worker.');
+  if (!bundle.mainWorker) throw new Error('This browser cannot run the SQL engine.');
 
   const worker = new Worker(bundle.mainWorker);
   // WARNING, not INFO: DuckDB is chatty at startup and the console is somewhere a
@@ -194,9 +196,15 @@ export async function loadTable(
   table: string,
   registeredName: string,
   kind: FileKind,
+  /**
+   * Register a UTF-8 copy of the file and return its name. Called only when DuckDB
+   * rejects the file's encoding; without it, that rejection is reported as is.
+   */
+  reencode?: () => Promise<{ name: string; encoding: string }>,
 ): Promise<string[]> {
   const notes: string[] = [];
-  const load = (options: string[] = []) => connection.query(loadSql(table, registeredName, kind, options));
+  let source = registeredName;
+  const load = (options: string[] = []) => connection.query(loadSql(table, source, kind, options));
   if (kind !== 'csv') {
     await load();
     return notes;
@@ -206,7 +214,19 @@ export async function loadTable(
   // whole file is read to decide instead — one extra pass, and the load succeeds.
   let options: string[] = [];
   try {
-    await load();
+    try {
+      await load();
+    } catch (error) {
+      // DuckDB reads UTF-8 only. A file saved by Excel on Windows usually is not, and
+      // the first accented letter stops the load. Decode a copy here and read that.
+      if (!reencode || !isEncodingError(message(error))) throw error;
+      const copy = await reencode();
+      source = copy.name;
+      notes.push(
+        `The file is not UTF-8, so it was read as ${copy.encoding}. Check that accented letters look right.`,
+      );
+      await load();
+    }
   } catch (error) {
     const reason = describeCsvFailure(message(error));
     if (!reason) throw error;
@@ -224,7 +244,7 @@ export async function loadTable(
     }
   }
 
-  const path = registeredName.replaceAll("'", "''");
+  const path = source.replaceAll("'", "''");
   let delimiter = ',';
   try {
     const sniffed = await runQuery(connection, `SELECT Delimiter, DateFormat FROM sniff_csv('${path}')`);
@@ -307,6 +327,23 @@ export async function exportCsv(
     // Otherwise every export leaks a copy of the result into the engine's memory.
     await db.dropFile(name).catch(() => {});
   }
+}
+
+/**
+ * Register a UTF-8 copy of a file that is not UTF-8, for `loadTable` to read instead.
+ *
+ * The copy lives in DuckDB's in-memory filesystem only. The original File is
+ * untouched, so a fingerprint taken of it still identifies the file the user chose.
+ */
+export async function registerUtf8Copy(
+  db: AsyncDuckDB,
+  name: string,
+  file: Blob,
+): Promise<{ name: string; encoding: string }> {
+  const { text, encoding } = decodeLegacyText(new Uint8Array(await file.arrayBuffer()));
+  const copy = `${name}.utf8`;
+  await db.registerFileBuffer(copy, new TextEncoder().encode(text));
+  return { name: copy, encoding };
 }
 
 /** Register a dropped file with the engine without reading it into memory. */

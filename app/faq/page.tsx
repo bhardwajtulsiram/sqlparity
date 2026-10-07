@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { ShieldIcon } from '@/components/icons';
 
 export const metadata: Metadata = {
-  title: 'Frequently Asked Questions — SQLParity',
+  title: { absolute: 'Frequently Asked Questions — SQLParity' },
   description:
-    'Common questions about SQLParity: how the 100% in-browser privacy guarantee works, verifying zero network requests, DuckDB-WASM execution, and commercial usage.',
+    'Common questions about SQLParity: how the 100% in-browser privacy guarantee works, verifying zero network requests, in-browser SQL execution, and commercial usage.',
   alternates: {
     canonical: '/faq/',
   },
@@ -25,7 +25,7 @@ const FAQ_SECTIONS = [
       {
         question: 'How can I independently verify that SQLParity does not upload my queries or schemas?',
         answer:
-          'Open your browser’s Developer Tools (F12 or right-click → Inspect), click the Network tab, and clear the log. Then paste queries into any tool, convert dialects, or run SQL on a CSV in the scratchpad. Notice that zero outgoing network requests occur. Everything computes directly in your computer’s RAM.',
+          'Open your browser’s Developer Tools (F12 or right-click → Inspect), click the Network tab, and clear the log. Then paste queries into any tool, convert dialects, or run SQL on a CSV in the SQL Scratchpad. Notice that zero outgoing network requests occur. Everything computes directly in your computer’s RAM.',
       },
       {
         question: 'What is Content Security Policy and how does connect-src "self" protect my team?',
@@ -53,14 +53,14 @@ const FAQ_SECTIONS = [
     category: 'Features & Technical Architecture',
     items: [
       {
-        question: 'How does the DuckDB Scratchpad work inside the browser?',
+        question: 'How does the SQL Scratchpad work inside the browser?',
         answer:
-          'DuckDB is compiled into WebAssembly (WASM). When you drag and drop a Parquet, CSV, or TSV file, the browser File API reads the file directly into DuckDB’s in-memory WASM engine, allowing you to run full analytical SQL queries locally at native speeds.',
+          'The Scratchpad runs an analytical SQL engine compiled into WebAssembly (WASM). When you drag and drop a Parquet, CSV, or TSV file, the browser File API reads the file directly into the engine’s memory, allowing you to run full analytical SQL queries locally at native speeds.',
       },
       {
-        question: 'What is the file size limit for Parquet or CSV files in the scratchpad?',
+        question: 'What is the file size limit for Parquet or CSV files in the SQL Scratchpad?',
         answer:
-          'Because DuckDB runs inside your browser’s WebAssembly memory space, performance depends on your computer’s available RAM. Files up to a few hundred megabytes (and hundreds of thousands of rows) typically query in seconds.',
+          'Because the engine runs inside your browser’s WebAssembly memory space, performance depends on your computer’s available RAM. Files up to a few hundred megabytes (and hundreds of thousands of rows) typically query in seconds.',
       },
       {
         question: 'Which SQL dialects are supported across the tools?',
@@ -70,7 +70,7 @@ const FAQ_SECTIONS = [
       {
         question: 'Does SQLParity work offline without an active internet connection?',
         answer:
-          'Yes. After the initial page load has loaded the assets into your browser cache, the core parsing, formatting, diffing, and DuckDB querying operate completely offline.',
+          'Yes. After the initial page load has loaded the assets into your browser cache, the core parsing, formatting, diffing, and file querying operate completely offline.',
       },
     ],
   },

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ParityMark, ShieldIcon, SparkIcon } from '@/components/icons';
 
 export const metadata: Metadata = {
-  title: 'About SQLParity — Why We Built Privacy-First SQL Tools',
+  title: { absolute: 'About SQLParity — Why We Built Privacy-First SQL Tools' },
   description:
     'The story behind SQLParity: built for data engineers, DBAs, and analysts who need fast migration and validation tools without violating enterprise Infosec policies.',
   alternates: {
@@ -89,7 +89,7 @@ export default function AboutPage() {
               <h3 className="font-semibold text-ink-900 dark:text-white">2. Real In-Browser Compute</h3>
             </div>
             <p className="text-xs leading-relaxed text-ink-600 dark:text-ink-400">
-              Instead of sending queries to a cloud server, SQLParity runs WebAssembly inside your browser. DuckDB-WASM executes analytical SQL queries against local Parquet and CSV files directly using your device&apos;s CPU and RAM.
+              Instead of sending queries to a cloud server, SQLParity runs WebAssembly inside your browser. An analytical SQL engine compiled to WebAssembly queries local Parquet and CSV files directly, using your device&apos;s CPU and RAM.
             </p>
           </div>
 

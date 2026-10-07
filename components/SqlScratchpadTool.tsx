@@ -5,7 +5,11 @@ import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { SqlEditor, type SqlEditorApi } from '@/components/SqlEditor';
 import { Button, CopyButton, Note, Panel } from '@/components/ui';
 import { ToolHeader } from '@/components/ToolHeader';
-import { PlayIcon, UploadIcon } from '@/components/icons';
+import { PlanIcon, PlayIcon, UploadIcon } from '@/components/icons';
+import { QueryPlanView } from '@/components/QueryPlanView';
+import { getDialect } from '@/lib/dialects';
+import { explainSql, isExplainable } from '@/lib/plan';
+import { reviewSql, type ReviewFinding } from '@/lib/review';
 import {
   completionSchema,
   csvHeaderWarning,
@@ -25,7 +29,7 @@ import {
 } from '@/lib/scratchpad';
 
 const STARTER = `-- Drop a CSV or Parquet file on the left, then query it.
-SELECT version() AS duckdb_version, current_date AS today`;
+SELECT 'ready' AS status, current_date AS today`;
 
 interface LoadedFile {
   table: string;
@@ -37,8 +41,18 @@ interface LoadedFile {
 
 type EngineState = 'idle' | 'starting' | 'ready' | 'failed';
 
-export function SqlScratchpadTool() {
-  const [sql, setSql] = useState(STARTER);
+const DESCRIPTION = 'Query a CSV, Parquet or JSON file with real SQL. The engine runs inside this tab, so the file is never uploaded.';
+
+/**
+ * The scratchpad, at its own address or at another tool's that is built on it — the
+ * query plan visualizer opens the same tool with a query worth explaining.
+ */
+export function SqlScratchpadTool({
+  href = '/scratchpad/',
+  description = DESCRIPTION,
+  starter = STARTER,
+}: { href?: string; description?: string; starter?: string } = {}) {
+  const [sql, setSql] = useState(starter);
   const [engine, setEngine] = useState<EngineState>('idle');
   const [engineError, setEngineError] = useState<string | null>(null);
   const [files, setFiles] = useState<LoadedFile[]>([]);
@@ -48,6 +62,9 @@ export function SqlScratchpadTool() {
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
+  const [plan, setPlan] = useState<{ json: string; findings: ReviewFinding[] } | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [explaining, setExplaining] = useState(false);
 
   const db = useRef<AsyncDuckDB | null>(null);
   const conn = useRef<AsyncDuckDBConnection | null>(null);
@@ -113,7 +130,7 @@ export function SqlScratchpadTool() {
       setLoadWarnings([]);
       try {
         const connected = await connection();
-        const { loadTable, registerFile, runQuery } = await import('@/lib/duckdb');
+        const { loadTable, registerFile, registerUtf8Copy, runQuery } = await import('@/lib/duckdb');
         const instance = db.current;
         if (!instance) throw new Error('The engine is not running.');
 
@@ -135,7 +152,9 @@ export function SqlScratchpadTool() {
 
           try {
             await registerFile(instance, file.name, file);
-            const notes = await loadTable(connected, table, file.name, kind);
+            const notes = await loadTable(connected, table, file.name, kind, () =>
+              registerUtf8Copy(instance, file.name, file),
+            );
 
             const counted = await runQuery(connected, `SELECT count(*) FROM "${table}"`);
             const described = await runQuery(connected, `DESCRIBE "${table}"`);
@@ -200,6 +219,35 @@ export function SqlScratchpadTool() {
       setQueryError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
+    }
+  }, [connection]);
+
+  /**
+   * Run the query once with the engine's profiler on, and keep the plan it reports:
+   * every step, the rows it produced and the time it took. Only for a query that
+   * reads — profiling executes the statement, and an UPDATE would really update.
+   */
+  const explain = useCallback(async () => {
+    const current = editor.current?.getText() ?? sqlRef.current;
+    if (current.trim() === '') return;
+    setPlanError(null);
+    if (!isExplainable(current, getDialect('duckdb'))) {
+      setPlan(null);
+      setPlanError('Only a single query that reads can be explained. The plan is measured by running it, and a statement that changes data would really change it.');
+      return;
+    }
+    setExplaining(true);
+    try {
+      const connected = await connection();
+      const { runQuery } = await import('@/lib/duckdb');
+      const outcome = await runQuery(connected, explainSql(current));
+      const json = String(outcome.rows[0]?.[outcome.rows[0].length - 1] ?? '');
+      setPlan({ json, findings: reviewSql(current, getDialect('duckdb')) });
+    } catch (error) {
+      setPlan(null);
+      setPlanError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExplaining(false);
     }
   }, [connection]);
 
@@ -276,11 +324,19 @@ export function SqlScratchpadTool() {
   return (
     <div className="space-y-5">
       <ToolHeader
-        href="/scratchpad/"
-        description="Query a CSV, Parquet or JSON file with real SQL. DuckDB runs inside this tab, so the file is never uploaded."
+        href={href}
+        description={description}
         status={
           <>
             <EngineBadge state={engine} />
+            <Button
+              icon={<PlanIcon />}
+              onClick={() => void explain()}
+              disabled={explaining || busy || sql.trim() === ''}
+              title="Run the query once and show how the engine executed it"
+            >
+              {explaining ? 'Explaining…' : 'Explain'}
+            </Button>
             <Button
               variant="primary"
               icon={<PlayIcon />}
@@ -441,13 +497,23 @@ export function SqlScratchpadTool() {
 
             {result && !queryError && <ResultTable result={result} />}
           </Panel>
+
+          {(plan || planError) && (
+            <Panel
+              step={4}
+              title="Query plan"
+              description="How the engine ran this query, step by step, measured by running it once."
+            >
+              {planError ? <Note tone={plan ? 'error' : 'warn'}>{planError}</Note> : plan && <QueryPlanView json={plan.json} findings={plan.findings} />}
+            </Panel>
+          )}
         </div>
       </div>
 
       <Panel title="What this is, and what it is not">
         <div className="grid gap-x-10 gap-y-4 text-[13px] leading-relaxed text-ink-600 sm:grid-cols-2 dark:text-ink-300">
           <p>
-            This is DuckDB, not your warehouse. Its SQL is close to PostgreSQL, so Athena, T-SQL
+            This is an engine in your browser, not your warehouse. Its SQL is close to PostgreSQL, so Athena, T-SQL
             and Oracle specifics will not run here — use it to check that logic is right against
             sample rows, then take the query to the engine it belongs to.
           </p>

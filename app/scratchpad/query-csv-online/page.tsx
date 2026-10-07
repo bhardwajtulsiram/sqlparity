@@ -3,23 +3,23 @@ import Link from 'next/link';
 import { SqlScratchpadTool } from '@/components/SqlScratchpadTool';
 
 export const metadata: Metadata = {
-  title: 'Query CSV Online with SQL — DuckDB WASM In-Browser',
+  title: 'Query CSV Online with SQL — In Your Browser, No Upload',
   description:
-    'Query CSV, TSV, or JSON files with full SQL syntax directly in your browser. DuckDB WebAssembly runs in the tab so your data is never uploaded to any remote server.',
+    'Query CSV, TSV, or JSON files with full SQL syntax directly in your browser. The SQL engine runs in the tab, so your data is never uploaded to any remote server.',
   alternates: {
     canonical: '/scratchpad/query-csv-online/',
   },
   openGraph: {
-    title: 'Query CSV Online with SQL — DuckDB WASM — SQLParity',
+    title: 'Query CSV Online with SQL — No Upload — SQLParity',
     description:
-      'Run SQL queries on CSV and TSV files locally in your browser. Powered by DuckDB WebAssembly — zero server uploads.',
+      'Run SQL queries on CSV and TSV files locally in your browser. A SQL engine in your tab — zero server uploads.',
     url: 'https://www.sqlparity.com/scratchpad/query-csv-online/',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Query CSV Online with SQL — DuckDB WASM',
-    description: 'Drop any CSV or TSV file and run real SQL in your browser tab with DuckDB. Zero uploads.',
+    title: 'Query CSV Online with SQL — No Upload',
+    description: 'Drop any CSV or TSV file and run real SQL in your browser tab. Zero uploads.',
   },
 };
 
@@ -42,7 +42,7 @@ export default function QueryCsvPage() {
           <div className="rounded-xl border border-[var(--border-card)] bg-[var(--surface-sunken)] p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-500">Automatic Schema Sniffing</h3>
             <p className="mt-2 text-xs leading-relaxed text-ink-700 dark:text-ink-300">
-              DuckDB automatically detects column types (dates, integers, decimals, text) and delimiters without requiring you to manually write a DDL schema first.
+              Column types are detected automatically (dates, integers, decimals, text) and delimiters without requiring you to manually write a DDL schema first.
             </p>
           </div>
 

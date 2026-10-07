@@ -3,7 +3,7 @@ import { BulkQueryGenerator } from '@/components/BulkQueryGenerator';
 import { ToolFaqSection } from '@/components/ToolFaqSection';
 
 export const metadata: Metadata = {
-  title: 'Bulk SQL query generator',
+  title: 'Bulk SQL Query Generator — Validation Queries from a CREATE TABLE',
   description:
     'Paste a CREATE TABLE or a list of fields and generate one SQL query per column. Variables resolve per data type, so date columns get date sentinels. Runs entirely in your browser.',
   alternates: {
@@ -34,7 +34,7 @@ const STEPS = [
 
 const FAQS = [
   {
-    question: 'Why validate migrations column by column rather than using SELECT *?',
+    question: 'Why validate data column by column rather than using SELECT *?',
     answer:
       'On tables with millions of rows, comparing whole rows at once is slow, resource-heavy, and makes it hard to see which specific column failed. Column-by-column validation queries isolate the exact mismatch counts per field.',
   },
@@ -61,7 +61,7 @@ export default function Page() {
       <BulkQueryGenerator />
       <ToolFaqSection
         toolName="Bulk Query Generator"
-        tagline="How to turn a table schema into automated migration validation queries."
+        tagline="How to turn a table schema into validation queries for every column."
         steps={STEPS}
         faqs={FAQS}
       />

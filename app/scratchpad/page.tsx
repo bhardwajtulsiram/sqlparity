@@ -3,9 +3,9 @@ import { SqlScratchpadTool } from '@/components/SqlScratchpadTool';
 import { ToolFaqSection } from '@/components/ToolFaqSection';
 
 export const metadata: Metadata = {
-  title: 'SQL scratchpad — query a CSV or Parquet file',
+  title: 'SQL Scratchpad — Query CSV and Parquet Files in Your Browser',
   description:
-    'Run real SQL against your own CSV, TSV, Parquet or JSON file. DuckDB runs inside the browser tab, so the file is never uploaded — no account, no server, nothing leaves your machine.',
+    'Run real SQL against your own CSV, TSV, Parquet or JSON file. The SQL engine runs inside the browser tab, so the file is never uploaded — no account, no server, nothing leaves your machine.',
   alternates: {
     canonical: '/scratchpad/',
   },
@@ -16,13 +16,13 @@ const STEPS = [
     step: 1,
     title: 'Drop in a Data File',
     description:
-      'Drag and drop any CSV, TSV, Parquet, or JSON Lines file from your computer into the scratchpad drop zone.',
+      'Drag and drop any CSV, TSV, Parquet, or JSON Lines file from your computer into the SQL Scratchpad drop zone.',
   },
   {
     step: 2,
     title: 'Run Real SQL Queries',
     description:
-      'DuckDB-WASM auto-registers your file as a table. Write queries with aggregations, CTEs, window functions, and joins.',
+      'Your file is registered as a table automatically. Write queries with aggregations, CTEs, window functions, and joins.',
   },
   {
     step: 3,
@@ -34,9 +34,9 @@ const STEPS = [
 
 const FAQS = [
   {
-    question: 'How does DuckDB run inside a web browser tab?',
+    question: 'How does a SQL engine run inside a web browser tab?',
     answer:
-      'DuckDB is compiled into WebAssembly (WASM). It executes directly within your browser’s virtual machine, reading file bytes from your local disk into memory without requiring any server infrastructure.',
+      'The engine is compiled into WebAssembly (WASM). It executes directly within your browser’s virtual machine, reading file bytes from your local disk into memory without requiring any server infrastructure.',
   },
   {
     question: 'Is my data file uploaded to any remote server or cloud bucket?',
@@ -60,7 +60,7 @@ export default function Page() {
     <div className="space-y-12">
       <SqlScratchpadTool />
       <ToolFaqSection
-        toolName="DuckDB SQL Scratchpad"
+        toolName="SQL Scratchpad"
         tagline="How to inspect, query, and analyze CSV and Parquet files in your browser tab."
         steps={STEPS}
         faqs={FAQS}
